@@ -1,22 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef} from "react";
 import L from 'leaflet';
-
+import { io } from "socket.io-client";
 import 'leaflet/dist/leaflet.css';
 import styles from "./styles/shuttle.css.js";
 import {
   DEFAULT_STOP,
   DEFAULT_ETA,
-  DEFAULT_ENDPOINT,
-  DEFAULT_POLL_SEC,
 } from "./constants";
-
 import { useLeafletMap } from "./hooks/useLeafletMap";
-import { useShuttleTracker } from "./hooks/useShuttleTracker";
-
 import AvailabilityCard from "./components/AvailabilityCard";
 import StopInfoCard from "./components/StopInfoCard";
-import ConfigPanel from "./components/ConfigPanel";
-
 // Inject stylesheet once
 function useGlobalStyles() {
   useEffect(() => {
@@ -31,23 +24,26 @@ function useGlobalStyles() {
 export default function ShuttleTracker() {
   useGlobalStyles();
 
-  // ── Config state ───────────────────────────────────────────
-  const [showCfg, setShowCfg] = useState(false);
-  const [endpoint, setEndpoint] = useState(DEFAULT_ENDPOINT);
-  const [pollSec, setPollSec] = useState(DEFAULT_POLL_SEC);
 
   // ── Map initialisation ─────────────────────────────────────
-  const { mapRef, LRef, markersRef } = useLeafletMap();
+  const { mapRef, LRef } = useLeafletMap();
 
   // ── Live tracking ──────────────────────────────────────────
-  const { tracking, shuttles, startTracking, stopTracking } =
-    useShuttleTracker({
-      endpoint,
-      pollSec,
-      LRef,
-      mapRef,
-      markersRef,
-    });
+
+
+    const vehiclesRef = useRef({});
+    const prevPositionsRef = useRef({});
+    const routePathRef = useRef([]);
+    const socketRef = useRef(null);
+    
+
+    function shouldMove(oldPos, newPos) {
+      const dx = oldPos[0] - newPos[0];
+      const dy = oldPos[1] - newPos[1];
+      const distance = Math.sqrt(dx * dx + dy * dy);
+    
+      return distance > 0.00005; // กัน jitter เล็กๆ (~5-6 เมตร)
+    }
 
   // ── Load Stops from Backend ───────────────────────────────
   useEffect(() => {
@@ -61,7 +57,7 @@ export default function ShuttleTracker() {
     }
   
     const customIcon = L.icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', // เปลี่ยนเป็น URL รูปของคุณ
+      iconUrl: 'icons/stop.png', // เปลี่ยนเป็น URL รูปของคุณ
       iconSize: [32, 32], // ขนาด [กว้าง, สูง]
       iconAnchor: [16, 32], // จุดที่วางลงบนพิกัด (กึ่งกลางฐานรูป)
       popupAnchor: [0, -32] // จุดที่ Popup จะเด้งออกมา
@@ -130,7 +126,8 @@ export default function ShuttleTracker() {
           coord[1], // lat
           coord[0], // lng
         ]);
-    
+        routePathRef.current = latlngs;
+        
         LRef.current.polyline(latlngs, {
           color: "#FC9186",
           weight: 4,
@@ -139,6 +136,7 @@ export default function ShuttleTracker() {
       } catch (err) {
         console.error(err);
       }
+      
     }
   
     interval = setInterval(waitForMap, 200);
@@ -146,21 +144,254 @@ export default function ShuttleTracker() {
     return () => clearInterval(interval);
   
   }, []);
+
+// eslint-disable-next-line react-hooks/exhaustive-deps
+  // useEffect(() => {
+  //   let interval;
   
+  //   function waitForMap() {
+  //     if (mapRef.current && LRef.current) {
+  //       clearInterval(interval);
+  //       startTracking();
+  //     }
+  //   }
   
+  //   async function startTracking() {
+  //     const busIcon = L.icon({
+  //       iconUrl: "/icons/bus.png",
+  //       iconSize: [26, 26],
+  //       iconAnchor: [13, 13],
+  //     });
   
+  //     // Poll ทุก 3 วิ
+  //     setInterval(async () => {
+  //       try {
+  //         const res = await fetch(
+  //           `${process.env.REACT_APP_BACKEND_URL}/api/admin/vehicles`
+  //         );
+  
+  //         const vehicles = await res.json();
+  
+  //         vehicles.forEach((vehicle) => {
+  //           const id = vehicle.id;
+  //           const newPos = [
+  //             Number(vehicle.lat),
+  //             Number(vehicle.lng),
+  //           ];
+  
+  //           // สร้าง marker ถ้ายังไม่มี
+  //           if (!vehiclesRef.current[id]) {
+  //             const marker = LRef.current.marker(newPos, {
+  //               icon: busIcon,
+  //             }).addTo(mapRef.current);
+  
+  //             vehiclesRef.current[id] = marker;
+  //             prevPositionsRef.current[id] = newPos;
+  //             return;
+  //           }
+  
+  //           const oldPos = prevPositionsRef.current[id];
+  
+  //           if (!shouldMove(oldPos, newPos)) return;
+  
+  //           animateMove(
+  //             vehiclesRef.current[id],
+  //             oldPos,
+  //             newPos
+  //           );
+  
+  //           prevPositionsRef.current[id] = newPos;
+  //         });
+  
+  //       } catch (err) {
+  //         console.error(err);
+  //       }
+  //     }, 3000);
+  //   }
+  
+  //   interval = setInterval(waitForMap, 200);
+  
+  //   return () => clearInterval(interval);
+  // }, []);
+
+// eslint-disable-next-line react-hooks/exhaustive-deps
+function animateMove(marker, start, end, duration = 1000) {
+  const startTime = performance.now();
+
+  function step(currentTime) {
+    const progress = Math.min(
+      (currentTime - startTime) / duration,
+      1
+    );
+
+    const lat =
+      start[0] + (end[0] - start[0]) * progress;
+
+    const lng =
+      start[1] + (end[1] - start[1]) * progress;
+
+    marker.setLatLng([lat, lng]);
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+// ของจริง
+// useEffect(() => {
+//   const socket = io(process.env.REACT_APP_BACKEND_URL);
+
+//   socket.on("vehicle:update", (vehicle) => {
+//     const id = vehicle.id;
+//     const newPos = [
+//       Number(vehicle.lat),
+//       Number(vehicle.lng),
+//     ];
+
+//     if (!vehiclesRef.current[id]) {
+//       const icon = L.icon({
+//         iconUrl: "/icons/bus.png",
+//         iconSize: [26, 26],
+//         iconAnchor: [13, 13],
+//       });
+
+//       const marker = LRef.current.marker(newPos, {
+//         icon,
+//       }).addTo(mapRef.current);
+
+//       vehiclesRef.current[id] = marker;
+//       prevPositionsRef.current[id] = newPos;
+//       return;
+//     }
+
+//     const oldPos = prevPositionsRef.current[id];
+
+//     if (!shouldMove(oldPos, newPos)) return;
+
+//     animateMove(
+//       vehiclesRef.current[id],
+//       oldPos,
+//       newPos
+//     );
+
+//     prevPositionsRef.current[id] = newPos;
+//   });
+
+//   return () => socket.disconnect();
+// }, []);
+
+// mock
+useEffect(() => {
+  let interval;
+
+  function waitForEverything() {
+    if (
+      mapRef.current &&
+      LRef.current &&
+      routePathRef.current.length > 0
+    ) {
+      clearInterval(interval);
+      startSimulation();
+    }
+  }
+
+  function startSimulation() {
+    console.log("🚍 START SIMULATION");
+
+    const path = routePathRef.current;
+
+    const busIcon = L.icon({
+      iconUrl: "/icons/bus.png",
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+
+    const fleet = [
+      { id: "BUS_01", offset: 0},
+      { id: "BUS_02", offset: 100},
+      { id: "BUS_03", offset: 200},
+    ];
+    
+    fleet.forEach(bus => {
+      const safeIndex = bus.offset % path.length;
+    
+      const marker = LRef.current.marker(
+        path[safeIndex],
+        { icon: busIcon }
+      ).addTo(mapRef.current);
+    
+      vehiclesRef.current[bus.id] = {
+        marker,
+        index: safeIndex,
+      };
+    });
+
+    setInterval(() => {
+      Object.values(vehiclesRef.current).forEach(bus => {
+        if (bus.paused) return;
+    
+        const nextIndex = (bus.index + 1) % path.length;
+    
+        const current = path[bus.index];
+        const next = path[nextIndex];
+    
+        if (!current || !next) return; // กัน crash
+    
+        animateMove(bus.marker, current, next, 800);
+    
+        bus.index = nextIndex;
+      });
+    }, 1000);
+  }
+
+  interval = setInterval(waitForEverything, 200);
+
+  return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
+  if (!socketRef.current || !mapRef.current || !LRef.current) return;
+
+  const busIcon = L.icon({
+    iconUrl: "/icons/bus.png",
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+
+  socketRef.current.on("vehicle:update", (vehicle) => {
+    const id = vehicle.id;
+    const newPos = [vehicle.lat, vehicle.lng];
+
+    if (!vehiclesRef.current[id]) {
+      const marker = LRef.current.marker(newPos, {
+        icon: busIcon,
+      }).addTo(mapRef.current);
+
+      vehiclesRef.current[id] = marker;
+      prevPositionsRef.current[id] = newPos;
+      return;
+    }
+
+    const oldPos = prevPositionsRef.current[id];
+
+    animateMove(
+      vehiclesRef.current[id],
+      oldPos,
+      newPos,
+      800
+    );
+
+    prevPositionsRef.current[id] = newPos;
+
+  });
+
+}, []);
 
   // ── Derived display values ─────────────────────────────────
-  const availableCount = shuttles.filter(
-    (s) => s.status !== "busy"
-  ).length;
-
-  const topStatus = shuttles[0]?.status ?? "idle";
-
-  function handleStart() {
-    startTracking();
-    setShowCfg(false);
-  }
+  const availableCount = 0;
+  const topStatus = "live";
 
   return (
     <div className="rsu-app">
@@ -174,20 +405,6 @@ export default function ShuttleTracker() {
       <div className="rsu-map-wrap">
         {/* Leaflet renders into this div */}
         <div id="rsu-map" />
-
-        {/* Config button + slide-down panel */}
-        <ConfigPanel
-          show={showCfg}
-          onToggle={() => setShowCfg((v) => !v)}
-          tracking={tracking}
-          endpoint={endpoint}
-          onEndpoint={setEndpoint}
-          pollSec={pollSec}
-          onPollSec={setPollSec}
-          onStart={handleStart}
-          onStop={stopTracking}
-          shuttles={shuttles}
-        />
 
         {/* Top-right availability */}
         <AvailabilityCard count={availableCount} />
