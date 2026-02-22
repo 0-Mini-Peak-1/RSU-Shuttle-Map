@@ -102,7 +102,7 @@ export default function ShuttleTracker() {
     async function loadRoute() {
       try {
         const res = await fetch(
-          `${process.env.REACT_APP_BACKEND_URL}/api/admin/routes/R01/path`
+          `${process.env.REACT_APP_BACKEND_URL}/api/admin/route-stops/R01`
         );
         const data = await res.json();
     
@@ -146,75 +146,6 @@ export default function ShuttleTracker() {
   }, []);
 
 // eslint-disable-next-line react-hooks/exhaustive-deps
-  // useEffect(() => {
-  //   let interval;
-  
-  //   function waitForMap() {
-  //     if (mapRef.current && LRef.current) {
-  //       clearInterval(interval);
-  //       startTracking();
-  //     }
-  //   }
-  
-  //   async function startTracking() {
-  //     const busIcon = L.icon({
-  //       iconUrl: "/icons/bus.png",
-  //       iconSize: [26, 26],
-  //       iconAnchor: [13, 13],
-  //     });
-  
-  //     // Poll ทุก 3 วิ
-  //     setInterval(async () => {
-  //       try {
-  //         const res = await fetch(
-  //           `${process.env.REACT_APP_BACKEND_URL}/api/admin/vehicles`
-  //         );
-  
-  //         const vehicles = await res.json();
-  
-  //         vehicles.forEach((vehicle) => {
-  //           const id = vehicle.id;
-  //           const newPos = [
-  //             Number(vehicle.lat),
-  //             Number(vehicle.lng),
-  //           ];
-  
-  //           // สร้าง marker ถ้ายังไม่มี
-  //           if (!vehiclesRef.current[id]) {
-  //             const marker = LRef.current.marker(newPos, {
-  //               icon: busIcon,
-  //             }).addTo(mapRef.current);
-  
-  //             vehiclesRef.current[id] = marker;
-  //             prevPositionsRef.current[id] = newPos;
-  //             return;
-  //           }
-  
-  //           const oldPos = prevPositionsRef.current[id];
-  
-  //           if (!shouldMove(oldPos, newPos)) return;
-  
-  //           animateMove(
-  //             vehiclesRef.current[id],
-  //             oldPos,
-  //             newPos
-  //           );
-  
-  //           prevPositionsRef.current[id] = newPos;
-  //         });
-  
-  //       } catch (err) {
-  //         console.error(err);
-  //       }
-  //     }, 3000);
-  //   }
-  
-  //   interval = setInterval(waitForMap, 200);
-  
-  //   return () => clearInterval(interval);
-  // }, []);
-
-// eslint-disable-next-line react-hooks/exhaustive-deps
 function animateMove(marker, start, end, duration = 1000) {
   const startTime = performance.now();
 
@@ -239,154 +170,99 @@ function animateMove(marker, start, end, duration = 1000) {
 
   requestAnimationFrame(step);
 }
-// ของจริง
-// useEffect(() => {
-//   const socket = io(process.env.REACT_APP_BACKEND_URL);
 
-//   socket.on("vehicle:update", (vehicle) => {
-//     const id = vehicle.id;
-//     const newPos = [
-//       Number(vehicle.lat),
-//       Number(vehicle.lng),
-//     ];
+function findNearestPointIndex(path, lat, lng) {
+  let minDist = Infinity;
+  let nearestIndex = 0;
 
-//     if (!vehiclesRef.current[id]) {
-//       const icon = L.icon({
-//         iconUrl: "/icons/bus.png",
-//         iconSize: [26, 26],
-//         iconAnchor: [13, 13],
-//       });
+  path.forEach((point, index) => {
+    const dx = point[0] - lat;
+    const dy = point[1] - lng;
+    const dist = dx * dx + dy * dy;
 
-//       const marker = LRef.current.marker(newPos, {
-//         icon,
-//       }).addTo(mapRef.current);
-
-//       vehiclesRef.current[id] = marker;
-//       prevPositionsRef.current[id] = newPos;
-//       return;
-//     }
-
-//     const oldPos = prevPositionsRef.current[id];
-
-//     if (!shouldMove(oldPos, newPos)) return;
-
-//     animateMove(
-//       vehiclesRef.current[id],
-//       oldPos,
-//       newPos
-//     );
-
-//     prevPositionsRef.current[id] = newPos;
-//   });
-
-//   return () => socket.disconnect();
-// }, []);
-
-// mock
-useEffect(() => {
-  let interval;
-
-  function waitForEverything() {
-    if (
-      mapRef.current &&
-      LRef.current &&
-      routePathRef.current.length > 0
-    ) {
-      clearInterval(interval);
-      startSimulation();
+    if (dist < minDist) {
+      minDist = dist;
+      nearestIndex = index;
     }
-  }
-
-  function startSimulation() {
-    console.log("🚍 START SIMULATION");
-
-    const path = routePathRef.current;
-
-    const busIcon = L.icon({
-      iconUrl: "/icons/bus.png",
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-    });
-
-    const fleet = [
-      { id: "BUS_01", offset: 0},
-      { id: "BUS_02", offset: 100},
-      { id: "BUS_03", offset: 200},
-    ];
-    
-    fleet.forEach(bus => {
-      const safeIndex = bus.offset % path.length;
-    
-      const marker = LRef.current.marker(
-        path[safeIndex],
-        { icon: busIcon }
-      ).addTo(mapRef.current);
-    
-      vehiclesRef.current[bus.id] = {
-        marker,
-        index: safeIndex,
-      };
-    });
-
-    setInterval(() => {
-      Object.values(vehiclesRef.current).forEach(bus => {
-        if (bus.paused) return;
-    
-        const nextIndex = (bus.index + 1) % path.length;
-    
-        const current = path[bus.index];
-        const next = path[nextIndex];
-    
-        if (!current || !next) return; // กัน crash
-    
-        animateMove(bus.marker, current, next, 800);
-    
-        bus.index = nextIndex;
-      });
-    }, 1000);
-  }
-
-  interval = setInterval(waitForEverything, 200);
-
-  return () => clearInterval(interval);
-}, []);
-
-useEffect(() => {
-  if (!socketRef.current || !mapRef.current || !LRef.current) return;
-
-  const busIcon = L.icon({
-    iconUrl: "/icons/bus.png",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
   });
 
-  socketRef.current.on("vehicle:update", (vehicle) => {
-    const id = vehicle.id;
-    const newPos = [vehicle.lat, vehicle.lng];
+  return nearestIndex;
+}
 
+function animateAlongRoute(marker, path, startIndex, endIndex) {
+  let i = startIndex;
+
+  function step() {
+    if (i >= endIndex) return;
+
+    const current = path[i];
+    const next = path[i + 1];
+
+    if (!current || !next) return;
+
+    animateMove(marker, current, next, 200);
+
+    i++;
+    setTimeout(step, 200);
+  }
+
+  step();
+}
+
+// ของจริง
+useEffect(() => {
+  const socket = io(process.env.REACT_APP_BACKEND_URL);
+
+  socket.on("connect", () => {
+    console.log("Connected:", socket.id);
+  });
+
+  socket.on("location-update", (data) => {
+    const id = data.vehicleId;
+    const newPos = [Number(data.lat), Number(data.lng)];
+  
+    const path = routePathRef.current;
+    if (!path.length) return;
+  
+    const newIndex = findNearestPointIndex(
+      path,
+      newPos[0],
+      newPos[1]
+    );
+  
     if (!vehiclesRef.current[id]) {
-      const marker = LRef.current.marker(newPos, {
-        icon: busIcon,
+      const marker = L.marker(path[newIndex], {
+        icon: L.icon({
+          iconUrl: "/icons/bus.png",
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        }),
       }).addTo(mapRef.current);
-
-      vehiclesRef.current[id] = marker;
-      prevPositionsRef.current[id] = newPos;
+  
+      vehiclesRef.current[id] = {
+        marker,
+        index: newIndex,
+      };
+  
       return;
     }
-
-    const oldPos = prevPositionsRef.current[id];
-
-    animateMove(
-      vehiclesRef.current[id],
-      oldPos,
-      newPos,
-      800
+  
+    const vehicle = vehiclesRef.current[id];
+    const currentIndex = vehicle.index;
+  
+    if (newIndex === currentIndex) return;
+  
+    animateAlongRoute(
+      vehicle.marker,
+      path,
+      currentIndex,
+      newIndex
     );
-
-    prevPositionsRef.current[id] = newPos;
-
+  
+    vehicle.index = newIndex;
   });
 
+  return () => socket.disconnect();
 }, []);
 
   // ── Derived display values ─────────────────────────────────
@@ -420,7 +296,7 @@ useEffect(() => {
         <div className="rsu-wm">
           Made in Rangsit University
           <br />
-          Version: Beta 0.2
+          Version: Beta 6.7
         </div>
       </div>
 
