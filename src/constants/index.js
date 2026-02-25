@@ -1,15 +1,15 @@
 // ── Map configuration ──────────────────────────────────────
-export const RSU_CENTER = [13.966927, 100.584509];
+export const RSU_CENTER = [13.966034, 100.585708];
 
 export const RSU_BOUNDS = [
-  [13.956, 100.574], // SW
-  [13.978, 100.595], // NE
+  [13.938111, 100.638938], // SW
+  [14.011699, 100.527594], // NE
 ];
 
 export const MAP_OPTIONS = {
   zoom: 16,
   minZoom: 15,
-  maxZoom: 18,
+  maxZoom: 19,
   maxBoundsViscosity: 1.0, // hard-locked to RSU campus
   zoomControl: false,
   attributionControl: false,

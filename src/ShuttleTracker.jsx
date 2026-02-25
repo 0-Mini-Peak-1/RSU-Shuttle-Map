@@ -3,6 +3,7 @@ import L from 'leaflet';
 import { io } from "socket.io-client";
 import 'leaflet/dist/leaflet.css';
 import styles from "./styles/shuttle.css.js";
+import { RSU_CENTER } from "./constants";
 import {
   DEFAULT_STOP,
   DEFAULT_ETA,
@@ -52,6 +53,10 @@ export default function ShuttleTracker() {
     function waitForMap() {
       if (mapRef.current && LRef.current) {
         clearInterval(interval);
+        mapRef.current.flyTo(RSU_CENTER, 17, {
+        animate: true,
+        duration: 1.5
+      });
         loadStops();
       }
     }
