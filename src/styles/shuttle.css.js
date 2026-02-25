@@ -280,6 +280,122 @@ const styles = `
   background: #FC9186;
   color: white;
 }
+
+/* ========================================================
+   NEW STOP INFO CARD (Glassmorphism - NO Dropdown)
+======================================================== */
+.rsu-stop-card-new {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 400px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.sc-header {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.sc-selected-stop {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: #f4f5f7;
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e1e4e8;
+  overflow: hidden;
+}
+
+.sc-icon { font-size: 1.1rem; margin-right: 10px; flex-shrink: 0; }
+
+.sc-stop-name {
+  font-family: 'Prompt', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1a1a2e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sc-gps-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #4a90d9, #7c3aed);
+  border: none;
+  border-radius: 12px;
+  padding: 8px 12px;
+  color: white;
+  font-family: 'Prompt', sans-serif;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+  flex-shrink: 0;
+}
+.sc-gps-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(124, 58, 237, 0.4); }
+.sc-gps-btn:active { transform: translateY(0); }
+.sc-gps-btn .gps-icon { font-size: 1.1rem; margin-bottom: 2px; }
+.sc-gps-btn span { font-size: 0.65rem; font-weight: 600; }
+
+.sc-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 16px;
+  border: 1px solid #eee;
+}
+
+.sc-eta-container { display: flex; flex-direction: column; }
+.sc-eta-label { font-size: 0.7rem; font-weight: 500; color: #888; margin-bottom: 2px; }
+.sc-eta-value { display: flex; align-items: baseline; gap: 4px; }
+.sc-number { font-size: 1.8rem; font-weight: 700; color: #1a1a2e; line-height: 1; }
+.sc-unit { font-size: 0.9rem; font-weight: 600; color: #555; }
+.sc-placeholder { font-size: 1.2rem; color: #ccc; font-weight: 600; }
+
+.sc-status-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8f9fa;
+  padding: 6px 12px;
+  border-radius: 99px;
+}
+.sc-status-text { font-size: 0.75rem; font-weight: 600; color: #444; }
+
+/* จุดของผู้ใช้ (สีฟ้ากระพริบ) บนแผนที่ */
+.user-loc-marker { display: flex; justify-content: center; align-items: center; }
+.user-pulse {
+  width: 14px;
+  height: 14px;
+  background-color: #2196F3;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7); }
+  70%  { transform: scale(1); box-shadow: 0 0 0 10px rgba(33, 150, 243, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(33, 150, 243, 0); }
+}
 `;
 
 
