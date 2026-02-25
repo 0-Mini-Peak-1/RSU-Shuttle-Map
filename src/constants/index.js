@@ -1,41 +1,14 @@
 // ── Map configuration ──────────────────────────────────────
 export const RSU_CENTER = [13.966034, 100.585708];
 
-export const RSU_BOUNDS = [
-  [13.938111, 100.638938], // SW
-  [14.011699, 100.527594], // NE
-];
 
 export const MAP_OPTIONS = {
   zoom: 16,
   minZoom: 15,
-  maxZoom: 19,
-  maxBoundsViscosity: 1.0, // hard-locked to RSU campus
+  maxZoom: 19.4,
   zoomControl: false,
   attributionControl: false,
 };
-
-// ── Mock shuttle data (used before real API is connected) ──
-export const MOCK_SHUTTLES = [
-  {
-    id: "SH-01",
-    name: "Shuttle A",
-    lat: 13.7558,
-    lng: 100.6155,
-    speed: 12,
-    status: "busy",
-    route: "Campus Loop",
-  },
-  {
-    id: "SH-02",
-    name: "Shuttle B",
-    lat: 13.7572,
-    lng: 100.6188,
-    speed: 0,
-    status: "idle",
-    route: "Campus Loop",
-  },
-];
 
 // ── Status color maps ──────────────────────────────────────
 export const STATUS_COLOR = {
@@ -59,5 +32,3 @@ export const STATUS_TEXT = {
 // ── Default UI state ───────────────────────────────────────
 export const DEFAULT_STOP = "Building 17";
 export const DEFAULT_ETA  = "2 Min";
-export const DEFAULT_ENDPOINT = "http://192.168.1.100:8080/api/location/latest";
-export const DEFAULT_POLL_SEC = 3;

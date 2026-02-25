@@ -251,6 +251,37 @@ const styles = `
   flex-shrink: 0;
   background: linear-gradient(90deg, #e91e8c, #7c3aed, #4a90d9);
 }
+/* ── Select button ──────────────────────────────────── */
+.route-selector {
+  position: absolute;
+  top: 90px;
+  left: 20px;
+  z-index: 999;
+  display: flex;
+  gap: 10px;
+}
+
+.route-btn {
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: none;
+  background: white;
+  cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  transition: 0.3s;
+}
+
+.route-btn:hover {
+  transform: translateY(-2px);
+}
+
+.route-btn.active {
+  background: #FC9186;
+  color: white;
+}
 `;
+
+
 
 export default styles;

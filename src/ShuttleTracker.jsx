@@ -1,17 +1,16 @@
-import { useState, useEffect, useRef} from "react";
-import L from 'leaflet';
+import { useEffect, useRef, useState } from "react";
+import L from "leaflet";
 import { io } from "socket.io-client";
-import 'leaflet/dist/leaflet.css';
+import "leaflet/dist/leaflet.css";
 import styles from "./styles/shuttle.css.js";
-import { RSU_CENTER } from "./constants";
-import {
-  DEFAULT_STOP,
-  DEFAULT_ETA,
-} from "./constants";
+import { RSU_CENTER, DEFAULT_STOP, DEFAULT_ETA } from "./constants";
 import { useLeafletMap } from "./hooks/useLeafletMap";
 import AvailabilityCard from "./components/AvailabilityCard";
 import StopInfoCard from "./components/StopInfoCard";
-// Inject stylesheet once
+
+/* ===============================
+  Inject Global Styles
+================================ */
 function useGlobalStyles() {
   useEffect(() => {
     if (document.getElementById("rsu-styles")) return;
@@ -22,290 +21,293 @@ function useGlobalStyles() {
   }, []);
 }
 
+/* ===============================
+  Main Component
+================================ */
 export default function ShuttleTracker() {
   useGlobalStyles();
 
-
-  // ── Map initialisation ─────────────────────────────────────
   const { mapRef, LRef } = useLeafletMap();
 
-  // ── Live tracking ──────────────────────────────────────────
+  /* ===============================
+    States & Refs
+  ================================= */
+  const [selectedRoute, setSelectedRoute] = useState("R01");
+  const vehiclesRef = useRef({});
+  const prevPositionsRef = useRef({});
+  const routeLayersRef = useRef({}); 
+  const stopLayersRef = useRef({});
 
+  /* ===============================
+    Utility: Anti-jitter
+  ================================= */
+  function shouldMove(oldPos, newPos) {
+    const dx = oldPos[0] - newPos[0];
+    const dy = oldPos[1] - newPos[1];
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return distance > 0.00003;
+  }
 
-    const vehiclesRef = useRef({});
-    const prevPositionsRef = useRef({});
-    const routePathRef = useRef([]);
-    const socketRef = useRef(null);
-    
+  /* ===============================
+    Smooth Animation
+  ================================= */
+  function animateMove(marker, start, end, duration = 800) {
+    const startTime = performance.now();
 
-    function shouldMove(oldPos, newPos) {
-      const dx = oldPos[0] - newPos[0];
-      const dy = oldPos[1] - newPos[1];
-      const distance = Math.sqrt(dx * dx + dy * dy);
-    
-      return distance > 0.00005; // กัน jitter เล็กๆ (~5-6 เมตร)
+    function step(currentTime) {
+      const progress = Math.min(
+        (currentTime - startTime) / duration,
+        1
+      );
+
+      const lat = start[0] + (end[0] - start[0]) * progress;
+      const lng = start[1] + (end[1] - start[1]) * progress;
+
+      marker.setLatLng([lat, lng]);
+
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      }
     }
 
-  // ── Load Stops from Backend ───────────────────────────────
+    requestAnimationFrame(step);
+  }
+
+  /* ===============================
+    Load Stops
+  ================================= */
   useEffect(() => {
     let interval;
   
     function waitForMap() {
       if (mapRef.current && LRef.current) {
         clearInterval(interval);
+
         mapRef.current.flyTo(RSU_CENTER, 17, {
-        animate: true,
-        duration: 1.5
-      });
-        loadStops();
+          animate: true,
+          duration: 1.2,
+        });
+
+        loadStopsByRoute();
       }
     }
   
-    const customIcon = L.icon({
-      iconUrl: 'icons/stop.png', // เปลี่ยนเป็น URL รูปของคุณ
-      iconSize: [32, 32], // ขนาด [กว้าง, สูง]
-      iconAnchor: [16, 32], // จุดที่วางลงบนพิกัด (กึ่งกลางฐานรูป)
-      popupAnchor: [0, -32] // จุดที่ Popup จะเด้งออกมา
-    });
-    
-    async function loadStops() {
-      try {
-        console.log("Loading stops...");
-        const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/stops`);
-        const stops = await res.json();
-    
-        stops.forEach((stop) => {
-          // 2. เปลี่ยนจาก L.circleMarker เป็น L.marker
-          LRef.current.marker([stop.lat, stop.lng], {
-            icon: customIcon // 3. ใส่ icon ที่เราสร้างไว้
-          })
-          .addTo(mapRef.current)
-          .bindPopup(stop.nameTh);
-        });
-    
-      } catch (err) {
-        console.error(err);
+    async function loadStopsByRoute() {
+      const routeIds = ["R01", "R02"];
+  
+      for (const routeId of routeIds) {
+        try {
+          const res = await fetch(
+            `${process.env.REACT_APP_BACKEND_URL}/api/admin/route-stops/${routeId}`
+          );
+  
+          const stops = await res.json();
+  
+          const layer = L.layerGroup();
+  
+          const stopIcon = L.icon({
+            iconUrl: "icons/stop.png",
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -32],
+          });
+  
+          stops.forEach((stop) => {
+            L.marker([stop.lat, stop.lng], {
+              icon: stopIcon,
+            })
+              .bindPopup(stop.nameTh)
+              .addTo(layer);
+          });
+  
+          stopLayersRef.current[routeId] = layer;
+  
+          // แสดงเฉพาะ route ที่เลือก
+          if (routeId === selectedRoute) {
+            layer.addTo(mapRef.current);
+          }
+  
+        } catch (err) {
+          console.error("Stop load error:", err);
+        }
       }
     }
   
     interval = setInterval(waitForMap, 200);
-  
     return () => clearInterval(interval);
-  
   }, []);
 
+  /* ===============================
+    Load Multiple Routes
+  ================================= */
   useEffect(() => {
     let interval;
-  
+
     function waitForMap() {
       if (mapRef.current && LRef.current) {
         clearInterval(interval);
-        loadRoute();
+        loadRoutes();
       }
     }
-  
-    async function loadRoute() {
-      try {
-        const res = await fetch(
-          `${process.env.REACT_APP_BACKEND_URL}/api/admin/route-stops/R01`
-        );
-        const data = await res.json();
-    
-        // แปลงเป็น format OSRM ต้อง lng,lat
-        const points = data.map(p => `${p.lng},${p.lat}`);
 
-// เอาจุดแรกไปต่อท้าย
-        points.push(points[0]);
+    async function loadRoutes() {
+      const routeIds = ["R01", "R02"];
 
-        const coordinates = points.join(";");
-    
-        const osrmRes = await fetch(
-          `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`
-        );
-    
-        const osrmData = await osrmRes.json();
-    
-        const routeGeo = osrmData.routes[0].geometry.coordinates;
-    
-        const latlngs = routeGeo.map(coord => [
-          coord[1], // lat
-          coord[0], // lng
-        ]);
-        routePathRef.current = latlngs;
-        
-        LRef.current.polyline(latlngs, {
-          color: "#FC9186",
-          weight: 4,
-        }).addTo(mapRef.current);
-    
-      } catch (err) {
-        console.error(err);
+      for (const routeId of routeIds) {
+        try {
+          const res = await fetch(
+            `${process.env.REACT_APP_BACKEND_URL}/api/admin/route-stops/${routeId}`
+          );
+          const data = await res.json();
+
+          const points = data.map(p => `${p.lng},${p.lat}`);
+          points.push(points[0]);
+          const coordinates = points.join(";");
+
+          const osrmRes = await fetch(
+            `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`
+          );
+
+          const osrmData = await osrmRes.json();
+          const routeGeo = osrmData.routes[0].geometry.coordinates;
+
+          const latlngs = routeGeo.map(coord => [
+            coord[1],
+            coord[0],
+          ]);
+
+          const layer = L.layerGroup();
+
+          L.polyline(latlngs, {
+            color: routeId === "R01" ? "#FC9186" : "#3B82F6",
+            weight: 5,
+          }).addTo(layer);
+
+          routeLayersRef.current[routeId] = layer;
+
+          if (routeId === selectedRoute) {
+            layer.addTo(mapRef.current);
+          }
+
+        } catch (err) {
+          console.error("Route load error:", err);
+        }
       }
-      
     }
-  
+
     interval = setInterval(waitForMap, 200);
-  
     return () => clearInterval(interval);
-  
   }, []);
 
-// eslint-disable-next-line react-hooks/exhaustive-deps
-function animateMove(marker, start, end, duration = 1000) {
-  const startTime = performance.now();
-
-  function step(currentTime) {
-    const progress = Math.min(
-      (currentTime - startTime) / duration,
-      1
-    );
-
-    const lat =
-      start[0] + (end[0] - start[0]) * progress;
-
-    const lng =
-      start[1] + (end[1] - start[1]) * progress;
-
-    marker.setLatLng([lat, lng]);
-
-    if (progress < 1) {
-      requestAnimationFrame(step);
-    }
+  /* ===============================
+    Route Switcher
+  ================================= */
+  function handleRouteChange(routeId) {
+    if (!mapRef.current) return;
+  
+    // ลบ route layer ทั้งหมด
+    Object.values(routeLayersRef.current).forEach(layer => {
+      mapRef.current.removeLayer(layer);
+    });
+  
+    // ลบ stop layer ทั้งหมด
+    Object.values(stopLayersRef.current).forEach(layer => {
+      mapRef.current.removeLayer(layer);
+    });
+  
+    // แสดงเฉพาะ route ที่เลือก
+    routeLayersRef.current[routeId]?.addTo(mapRef.current);
+    stopLayersRef.current[routeId]?.addTo(mapRef.current);
+  
+    setSelectedRoute(routeId);
   }
+  /* ===============================
+    WebSocket Tracking
+  ================================= */
+  useEffect(() => {
+    const socket = io(process.env.REACT_APP_BACKEND_URL);
 
-  requestAnimationFrame(step);
-}
+    socket.on("connect", () => {
+      console.log("Connected:", socket.id);
+    });
 
-function findNearestPointIndex(path, lat, lng) {
-  let minDist = Infinity;
-  let nearestIndex = 0;
+    socket.on("location-update", (data) => {
+      if (!mapRef.current) return;
 
-  path.forEach((point, index) => {
-    const dx = point[0] - lat;
-    const dy = point[1] - lng;
-    const dist = dx * dx + dy * dy;
+      const id = data.vehicleId;
+      const newPos = [Number(data.lat), Number(data.lng)];
 
-    if (dist < minDist) {
-      minDist = dist;
-      nearestIndex = index;
-    }
-  });
+      if (!vehiclesRef.current[id]) {
+        const marker = L.marker(newPos, {
+          icon: L.icon({
+            iconUrl: "/icons/bus.png",
+            iconSize: [26, 26],
+            iconAnchor: [13, 13],
+          }),
+        }).addTo(mapRef.current);
 
-  return nearestIndex;
-}
+        vehiclesRef.current[id] = marker;
+        prevPositionsRef.current[id] = newPos;
+        return;
+      }
 
-function animateAlongRoute(marker, path, startIndex, endIndex) {
-  let i = startIndex;
+      const oldPos = prevPositionsRef.current[id];
 
-  function step() {
-    if (i >= endIndex) return;
+      if (!shouldMove(oldPos, newPos)) return;
 
-    const current = path[i];
-    const next = path[i + 1];
+      animateMove(
+        vehiclesRef.current[id],
+        oldPos,
+        newPos
+      );
 
-    if (!current || !next) return;
+      prevPositionsRef.current[id] = newPos;
+    });
 
-    animateMove(marker, current, next, 200);
+    return () => socket.disconnect();
+  }, []);
 
-    i++;
-    setTimeout(step, 200);
-  }
-
-  step();
-}
-
-// ของจริง
-useEffect(() => {
-  const socket = io(process.env.REACT_APP_BACKEND_URL);
-
-  socket.on("connect", () => {
-    console.log("Connected:", socket.id);
-  });
-
-  socket.on("location-update", (data) => {
-    const id = data.vehicleId;
-    const newPos = [Number(data.lat), Number(data.lng)];
-  
-    const path = routePathRef.current;
-    if (!path.length) return;
-  
-    const newIndex = findNearestPointIndex(
-      path,
-      newPos[0],
-      newPos[1]
-    );
-  
-    if (!vehiclesRef.current[id]) {
-      const marker = L.marker(path[newIndex], {
-        icon: L.icon({
-          iconUrl: "/icons/bus.png",
-          iconSize: [26, 26],
-          iconAnchor: [13, 13],
-        }),
-      }).addTo(mapRef.current);
-  
-      vehiclesRef.current[id] = {
-        marker,
-        index: newIndex,
-      };
-  
-      return;
-    }
-  
-    const vehicle = vehiclesRef.current[id];
-    const currentIndex = vehicle.index;
-  
-    if (newIndex === currentIndex) return;
-  
-    animateAlongRoute(
-      vehicle.marker,
-      path,
-      currentIndex,
-      newIndex
-    );
-  
-    vehicle.index = newIndex;
-  });
-
-  return () => socket.disconnect();
-}, []);
-
-  // ── Derived display values ─────────────────────────────────
-  const availableCount = 0;
-  const topStatus = "live";
-
+  /* ===============================
+    UI
+  ================================= */
   return (
     <div className="rsu-app">
-      {/* ── Header ── */}
       <header className="rsu-hdr">
         <h1>Rangsit University</h1>
         <p>Shuttle Bus Map</p>
       </header>
 
-      {/* ── Map area ── */}
       <div className="rsu-map-wrap">
-        {/* Leaflet renders into this div */}
         <div id="rsu-map" />
 
-        {/* Top-right availability */}
-        <AvailabilityCard count={availableCount} />
+        {/* Route Selector */}
+        <div className="route-selector">
+          {["R01", "R02"].map(route => (
+            <button
+              key={route}
+              className={`route-btn ${selectedRoute === route ? "active" : ""}`}
+              onClick={() => handleRouteChange(route)}
+            >
+              {route}
+            </button>
+          ))}
+        </div>
 
-        {/* Bottom-left stop info */}
+        <AvailabilityCard count={0} />
+
         <StopInfoCard
           stopName={DEFAULT_STOP}
           eta={DEFAULT_ETA}
-          status={topStatus}
+          status="live"
         />
 
-        {/* Watermark */}
         <div className="rsu-wm">
           Made in Rangsit University
           <br />
-          Version: Beta 6.7
+          Version: Beta 8.0
         </div>
       </div>
 
-      {/* ── Bottom gradient bar ── */}
       <div className="rsu-bar" />
     </div>
   );
