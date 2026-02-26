@@ -13,7 +13,7 @@ export function useLeafletMap() {
       const map = L.map("rsu-map", {
         zoomControl: false,
         attributionControl: false,
-      }).setView(RSU_CENTER, 17);
+      }).setView(RSU_CENTER, 15); //ห้ามเปลี่ยนเดี๋ยวกระตุก
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
