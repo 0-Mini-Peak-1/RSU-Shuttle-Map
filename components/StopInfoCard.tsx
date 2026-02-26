@@ -1,19 +1,23 @@
-/**
- * StopInfoCard
- * Clean UI without dropdown. Shows the stop name clicked by user and ETA.
- */
-export default function StopInfoCard({ targetStop, eta, onFindNearest }) {
-  
+import React from "react";
+import { Stop } from "../types";
+
+interface StopInfoCardProps {
+  targetStop: Stop | null;
+  eta: number | null;
+  onFindNearest: () => void;
+}
+
+export default function StopInfoCard({ targetStop, eta, onFindNearest }: StopInfoCardProps) {
   let statusText = "เลือกป้ายเพื่อดูเวลา";
   let statusClass = "idle";
   
   if (targetStop) {
     if (eta === null) {
       statusText = "ยังไม่มีรถในสายนี้";
-      statusClass = "busy"; // แดง
+      statusClass = "busy"; 
     } else if (eta === 0) {
       statusText = "กำลังมาถึง!";
-      statusClass = "active"; // เขียว
+      statusClass = "active"; 
     } else {
       statusText = "กำลังเดินทาง";
       statusClass = "active";
@@ -26,7 +30,7 @@ export default function StopInfoCard({ targetStop, eta, onFindNearest }) {
         <div className="sc-selected-stop">
           <div className="sc-icon">🚏</div>
           <div className="sc-stop-name">
-            {targetStop ? (targetStop.nameTh || targetStop.name) : "คลิกเลือกป้ายรถเมล์บนแผนที่"}
+            {targetStop ? (targetStop.nameTh || targetStop.name) : "คลิกเลือกป้ายบนแผนที่"}
           </div>
         </div>
         
@@ -46,7 +50,6 @@ export default function StopInfoCard({ targetStop, eta, onFindNearest }) {
           <div className="sc-eta-value">
             {targetStop && eta !== null ? (
               <>
-                {/* เปลี่ยนเงื่อนไขแสดงผลเป็น < 1 แทน Now */}
                 <span className="sc-number">{eta === 0 ? "< 1" : eta}</span>
                 <span className="sc-unit">นาที</span>
               </>
