@@ -2,12 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========================================================
+  1. โครงสร้างหลัก (App Shell & Layout)
+======================================================== */
 body {
   margin: 0;
   padding: 0;
 }
 
-/* ── App shell ─────────────────────────────────────────── */
 .rsu-app {
   width: 100%;
   height: 100vh;
@@ -17,7 +19,27 @@ body {
   background: #dfe3ee;
 }
 
-/* ── Header ─────────────────────────────────────────────── */
+.rsu-map-wrap {
+  flex: 1;
+  position: relative;
+}
+
+#rsu-map {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* แถบสีด้านล่างสุด */
+.rsu-bar {
+  height: 5px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, #e91e8c, #7c3aed, #4a90d9);
+}
+
+/* ========================================================
+  2. ส่วนหัว (Header)
+======================================================== */
 .rsu-hdr {
   background: linear-gradient(120deg, #e91e8c 0%, #c2185b 28%, #7c3aed 65%, #4a90d9 100%);
   padding: 18px 28px 14px;
@@ -25,6 +47,7 @@ body {
   flex-shrink: 0;
   box-shadow: 0 2px 16px rgba(0,0,0,0.2);
 }
+
 .rsu-hdr h1 {
   font-size: 1.3rem;
   font-weight: 700;
@@ -32,6 +55,7 @@ body {
   margin: 0 0 2px;
   letter-spacing: 0.01em;
 }
+
 .rsu-hdr p {
   font-size: 0.8rem;
   font-weight: 400;
@@ -39,11 +63,9 @@ body {
   margin: 0;
 }
 
-/* ── Map wrapper ─────────────────────────────────────────── */
-.rsu-map-wrap { flex: 1; position: relative; }
-#rsu-map      { width: 100%; height: 100%; z-index: 1; }
-
-/* Leaflet overrides */
+/* ========================================================
+  3. ปรับแต่งแผนที่ Leaflet (Overrides)
+======================================================== */
 .leaflet-control-attribution { display: none !important; }
 .leaflet-control-zoom { margin-bottom: 120px !important; }
 .leaflet-control-zoom a {
@@ -56,10 +78,12 @@ body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
   padding: 0 !important;
 }
-.leaflet-popup-content       { margin: 12px 16px !important; font-family: inherit; }
+.leaflet-popup-content { margin: 12px 16px !important; font-family: inherit; }
 .leaflet-popup-tip-container { display: none !important; }
 
-/* ── Availability card (top-right) ───────────────────────── */
+/* ========================================================
+  4. UI ควบคุมแผนที่ (รถว่าง & เลือกสายรถ)
+======================================================== */
 .rsu-avail {
   position: absolute;
   top: 16px;
@@ -72,11 +96,11 @@ body {
   z-index: 500;
   min-width: 115px;
 }
-.rsu-avail-lbl { font-size: 0.7rem;  font-weight: 500; color: #999; margin-bottom: 1px; }
-.rsu-avail-num { font-size: 2.9rem;  font-weight: 700; color: #1a1a2e; line-height: 1; margin-bottom: 1px; }
-.rsu-avail-sub { font-size: 0.7rem;  font-weight: 500; color: #666; line-height: 1.35; }
 
-/* ── Route Select button ──────────────────────────────────── */
+.rsu-avail-lbl { font-size: 0.7rem; font-weight: 500; color: #999; margin-bottom: 1px; }
+.rsu-avail-num { font-size: 2.9rem; font-weight: 700; color: #1a1a2e; line-height: 1; margin-bottom: 1px; }
+.rsu-avail-sub { font-size: 0.7rem; font-weight: 500; color: #666; line-height: 1.35; }
+
 .route-selector {
   position: absolute;
   top: 20px;
@@ -96,110 +120,13 @@ body {
   box-shadow: 0 4px 10px rgba(0,0,0,0.15);
   transition: 0.3s;
 }
+
 .route-btn:hover { transform: translateY(-2px); }
 .route-btn.active { background: #FC9186; color: white; }
 
-/* ── Bottom gradient bar ──────────────────────────────────── */
-.rsu-bar {
-  height: 5px;
-  flex-shrink: 0;
-  background: linear-gradient(90deg, #e91e8c, #7c3aed, #4a90d9);
-}
-
 /* ========================================================
-   NEW STOP INFO CARD (Glassmorphism - NO Dropdown)
+  5. จุดตำแหน่งผู้ใช้ (สีฟ้ากระพริบ)
 ======================================================== */
-.rsu-stop-card-new {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90%;
-  max-width: 400px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  padding: 16px;
-  z-index: 500;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-}
-
-.sc-header {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.sc-selected-stop {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  background: #f4f5f7;
-  border-radius: 12px;
-  padding: 12px 14px;
-  border: 1px solid #e1e4e8;
-  overflow: hidden;
-}
-
-.sc-icon { font-size: 1.1rem; margin-right: 10px; flex-shrink: 0; }
-.sc-stop-name { font-size: 0.85rem; font-weight: 600; color: #1a1a2e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.sc-gps-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #4a90d9, #7c3aed);
-  border: none;
-  border-radius: 12px;
-  padding: 8px 12px;
-  color: white;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
-  flex-shrink: 0;
-}
-.sc-gps-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(124, 58, 237, 0.4); }
-.sc-gps-btn .gps-icon { font-size: 1.1rem; margin-bottom: 2px; }
-.sc-gps-btn span { font-size: 0.65rem; font-weight: 600; }
-
-.sc-body {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #fff;
-  border-radius: 14px;
-  padding: 12px 16px;
-  border: 1px solid #eee;
-}
-
-.sc-eta-container { display: flex; flex-direction: column; }
-.sc-eta-label { font-size: 0.7rem; font-weight: 500; color: #888; margin-bottom: 2px; }
-.sc-eta-value { display: flex; align-items: baseline; gap: 4px; }
-.sc-number { font-size: 1.8rem; font-weight: 700; color: #1a1a2e; line-height: 1; }
-.sc-unit { font-size: 0.9rem; font-weight: 600; color: #555; }
-.sc-placeholder { font-size: 1.2rem; color: #ccc; font-weight: 600; }
-
-.sc-status-container {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #f8f9fa;
-  padding: 6px 12px;
-  border-radius: 99px;
-}
-.sc-status-text { font-size: 0.75rem; font-weight: 600; color: #444; }
-
-.rsu-sdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-.rsu-sdot.busy   { background: #e53935; box-shadow: 0 0 0 3px rgba(229,57,53,0.2); }
-.rsu-sdot.active { background: #43a047; box-shadow: 0 0 0 3px rgba(67,160,71,0.2); }
-.rsu-sdot.idle   { background: #fb8c00; box-shadow: 0 0 0 3px rgba(251,140,0,0.2); }
-
-/* จุดของผู้ใช้ (สีฟ้ากระพริบ) บนแผนที่ */
 .user-loc-marker { display: flex; justify-content: center; align-items: center; }
 .user-pulse {
   width: 14px;
@@ -210,25 +137,29 @@ body {
   box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
   animation: pulse 1.5s infinite;
 }
+
 @keyframes pulse {
   0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7); }
   70%  { transform: scale(1); box-shadow: 0 0 0 10px rgba(33, 150, 243, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(33, 150, 243, 0); }
 }
 
-/* คุมตำแหน่งให้อยู่มุมซ้ายล่าง และเรียงจากล่างขึ้นบน */
+/* ========================================================
+  6. การ์ดแสดงข้อมูลป้ายรถเมล์ (มุมซ้ายล่าง)
+======================================================== */
+/* ตัวห่อหุ้ม Card และปุ่ม GPS */
 .stop-info-wrapper {
   position: absolute;
   bottom: 30px;
   left: 20px;
   z-index: 1000;
   display: flex;
-  flex-direction: column-reverse; /* ให้ปุ่มเป้าเล็งอยู่ล่างสุด Card ดันขึ้นข้างบน */
+  flex-direction: column-reverse; 
   gap: 12px;
   align-items: flex-start;
 }
 
-/* สไตล์ปุ่มเป้าเล็ง (GPS) */
+/* ปุ่ม GPS ใกล้ฉัน */
 .gps-locate-btn {
   width: 44px;
   height: 44px;
@@ -243,155 +174,81 @@ body {
   color: #333;
   transition: background-color 0.2s;
 }
-.gps-locate-btn:hover {
-  background-color: #f0f0f0;
-}
+.gps-locate-btn:hover { background-color: #f0f0f0; }
 
-/* สไตล์ Card ที่เล็กลง */
-.stop-info-card-compact {
-  width: 250px; /* ย่อความกว้างลงจากเดิม */
-  background: white;
+/* ตัวการ์ด (ขนาดกะทัดรัด) */
+.rsu-stop-card-compact {
+  width: 260px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
   border-radius: 16px;
   padding: 16px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.stop-title-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #f8f9fa;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #333;
-}
-
-.eta-label {
-  font-size: 11px;
-  color: #888;
-  margin: 0;
-}
-
-.eta-value-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-}
-
-.eta-time {
-  font-size: 14px;
-  color: #555;
-}
-
-.eta-time strong {
-  font-size: 26px;
-  color: #111;
-  font-weight: 800;
-  margin-right: 4px;
-}
-
-.eta-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 20px;
-}
-.eta-status.on-way {
-  background: #f0fdf4;
-  color: #16a34a;
-}
-.eta-status.arriving {
-  background: #fef2f2;
-  color: #dc2626;
-}
-.status-dot {
-  width: 6px;
-  height: 6px;
-  background: currentColor;
-  border-radius: 50%;
-}
-/* 🚀 สไตล์สำหรับรูปภาพป้ายรถเมล์ */
+/* ส่วนรูปภาพป้าย */
 .sc-image-container {
   width: 100%;
-  height: 120px; /* ปรับความสูงของรูปได้ตามต้องการ (120px-150px กำลังสวย) */
+  height: 120px;
   border-radius: 10px;
   overflow: hidden;
-  margin-bottom: 8px; /* เว้นระยะห่างจากชื่อป้ายด้านล่าง */
-  background-color: #f0f0f0; /* สีพื้นหลังเผื่อรูประหว่างโหลด */
+  background-color: #f0f0f0;
 }
-
 .sc-stop-image {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* ตัดส่วนเกินออก ให้รูปเต็มกรอบพอดี ไม่บิดเบี้ยว */
+  object-fit: cover;
   display: block;
 }
-/* 🚀 Image Modal Styles - สไตล์สำหรับรูปภาพตอนขยายเต็มหน้าจอ */
 
-/* พื้นหลังสีดำโปร่งแสง */
-.sc-image-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.85); /* สีดำโปร่งแสงทึบๆ */
+/* ส่วนหัวของการ์ด (ชื่อป้าย) */
+.sc-header { display: flex; gap: 8px; align-items: stretch; }
+.sc-selected-stop {
+  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 2000; /* ต้องสูงกว่าแผนที่และส่วนประกอบอื่นๆ บนหน้าจอ */
-  cursor: zoom-out; /* Indicate click to close */
+  background: #f4f5f7;
+  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e1e4e8;
+}
+.sc-icon { font-size: 1.1rem; margin-right: 8px; flex-shrink: 0; }
+.sc-stop-name { font-size: 0.85rem; font-weight: 700; color: #333; }
+
+/* ส่วนแสดงเวลา (ETA) */
+.sc-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid #eee;
 }
 
-/* Container คุมขนาดรูป */
-.sc-image-modal-content {
-  position: relative;
-  max-width: 90vw; /* ให้รูปกว้างไม่เกิน 90% ของหน้าจอ */
-  max-height: 90vh; /* ให้รูปสูงไม่เกิน 90% ของหน้าจอ */
-  background: white; /* ขอบขาวเล็กๆ เพื่อความสวยงาม */
-  border-radius: 16px;
-  overflow: hidden; /* For rounded corners to work */
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  cursor: default; /* Disable zoom-out cursor here */
-}
+.sc-eta-container { display: flex; flex-direction: column; }
+.sc-eta-label { font-size: 0.7rem; font-weight: 500; color: #888; margin-bottom: 2px; }
+.sc-eta-value { display: flex; align-items: baseline; gap: 4px; }
+.sc-number { font-size: 1.8rem; font-weight: 800; color: #1a1a2e; line-height: 1; }
+.sc-unit { font-size: 0.85rem; font-weight: 600; color: #555; }
+.sc-placeholder { font-size: 1.2rem; color: #ccc; font-weight: 600; }
 
-/* รูปที่ขยายเต็มที่ */
-.sc-stop-image-zoomed {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: contain; /* Maintain ratio, don't crop */
-}
-
-/* ปุ่มปิด Modal (X) */
-.sc-image-modal-close {
-  position: absolute;
-  top: 10px;
-  right: 15px;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  font-size: 32px;
-  font-weight: bold;
-  cursor: pointer;
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
+/* สถานะรถ (วงกลมเขียว/แดง) */
+.sc-status-container {
   display: flex;
   align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transition: background 0.2s;
-  z-index: 2010;
+  gap: 6px;
+  background: #f8f9fa;
+  padding: 6px 10px;
+  border-radius: 99px;
 }
-.sc-image-modal-close:hover {
-  background: rgba(255, 255, 255, 0.4);
-}
+.sc-status-text { font-size: 0.75rem; font-weight: 700; color: #444; }
+
+.rsu-sdot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.rsu-sdot.busy   { background: #e53935; box-shadow: 0 0 0 3px rgba(229,57,53,0.2); }
+.rsu-sdot.active { background: #43a047; box-shadow: 0 0 0 3px rgba(67,160,71,0.2); }
+.rsu-sdot.idle   { background: #fb8c00; box-shadow: 0 0 0 3px rgba(251,140,0,0.2); }
