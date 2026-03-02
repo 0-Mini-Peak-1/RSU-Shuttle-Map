@@ -215,3 +215,183 @@ body {
   70%  { transform: scale(1); box-shadow: 0 0 0 10px rgba(33, 150, 243, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(33, 150, 243, 0); }
 }
+
+/* คุมตำแหน่งให้อยู่มุมซ้ายล่าง และเรียงจากล่างขึ้นบน */
+.stop-info-wrapper {
+  position: absolute;
+  bottom: 30px;
+  left: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column-reverse; /* ให้ปุ่มเป้าเล็งอยู่ล่างสุด Card ดันขึ้นข้างบน */
+  gap: 12px;
+  align-items: flex-start;
+}
+
+/* สไตล์ปุ่มเป้าเล็ง (GPS) */
+.gps-locate-btn {
+  width: 44px;
+  height: 44px;
+  background-color: white;
+  border: none;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  color: #333;
+  transition: background-color 0.2s;
+}
+.gps-locate-btn:hover {
+  background-color: #f0f0f0;
+}
+
+/* สไตล์ Card ที่เล็กลง */
+.stop-info-card-compact {
+  width: 250px; /* ย่อความกว้างลงจากเดิม */
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stop-title-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+}
+
+.eta-label {
+  font-size: 11px;
+  color: #888;
+  margin: 0;
+}
+
+.eta-value-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.eta-time {
+  font-size: 14px;
+  color: #555;
+}
+
+.eta-time strong {
+  font-size: 26px;
+  color: #111;
+  font-weight: 800;
+  margin-right: 4px;
+}
+
+.eta-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+.eta-status.on-way {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+.eta-status.arriving {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+}
+/* 🚀 สไตล์สำหรับรูปภาพป้ายรถเมล์ */
+.sc-image-container {
+  width: 100%;
+  height: 120px; /* ปรับความสูงของรูปได้ตามต้องการ (120px-150px กำลังสวย) */
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px; /* เว้นระยะห่างจากชื่อป้ายด้านล่าง */
+  background-color: #f0f0f0; /* สีพื้นหลังเผื่อรูประหว่างโหลด */
+}
+
+.sc-stop-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* ตัดส่วนเกินออก ให้รูปเต็มกรอบพอดี ไม่บิดเบี้ยว */
+  display: block;
+}
+/* 🚀 Image Modal Styles - สไตล์สำหรับรูปภาพตอนขยายเต็มหน้าจอ */
+
+/* พื้นหลังสีดำโปร่งแสง */
+.sc-image-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.85); /* สีดำโปร่งแสงทึบๆ */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000; /* ต้องสูงกว่าแผนที่และส่วนประกอบอื่นๆ บนหน้าจอ */
+  cursor: zoom-out; /* Indicate click to close */
+}
+
+/* Container คุมขนาดรูป */
+.sc-image-modal-content {
+  position: relative;
+  max-width: 90vw; /* ให้รูปกว้างไม่เกิน 90% ของหน้าจอ */
+  max-height: 90vh; /* ให้รูปสูงไม่เกิน 90% ของหน้าจอ */
+  background: white; /* ขอบขาวเล็กๆ เพื่อความสวยงาม */
+  border-radius: 16px;
+  overflow: hidden; /* For rounded corners to work */
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  cursor: default; /* Disable zoom-out cursor here */
+}
+
+/* รูปที่ขยายเต็มที่ */
+.sc-stop-image-zoomed {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain; /* Maintain ratio, don't crop */
+}
+
+/* ปุ่มปิด Modal (X) */
+.sc-image-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 32px;
+  font-weight: bold;
+  cursor: pointer;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.2s;
+  z-index: 2010;
+}
+.sc-image-modal-close:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
