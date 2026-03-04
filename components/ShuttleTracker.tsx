@@ -121,19 +121,8 @@ export default function ShuttleTracker() {
       const speedKmh = Math.max(5, history.length > 0 ? history.reduce((a, b) => a + b, 0) / history.length : 15);
       const drivingTimeMinutes = pathDist / (speedKmh * (1000 / 60));
 
-      let stopsInBetween = 0;
-      stops.forEach(s => {
-        if (s.polyIndex === undefined || String(s.id) === String(stop.id)) return;
-        const sIdx = s.polyIndex;
-        if (!isPassed) {
-          if (busIdx <= stopIdx ? (sIdx > busIdx && sIdx < stopIdx) : (sIdx > busIdx || sIdx < stopIdx)) stopsInBetween++;
-        } else {
-          if (busIdx <= stopIdx) stopsInBetween = stops.length - 1;
-          else if (sIdx > busIdx || sIdx < stopIdx) stopsInBetween++;
-        }
-      });
 
-      const etaMinutes = Math.floor(drivingTimeMinutes + (stopsInBetween * 0.4));
+      const etaMinutes = Math.floor(drivingTimeMinutes);
       if (etaMinutes < minEtaMinutes) minEtaMinutes = etaMinutes;
     });
 
@@ -149,7 +138,7 @@ export default function ShuttleTracker() {
 
   // === 2. โหลดรถบัสตั้งต้น ===
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/vehicles`)
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/active-vehicles`)
       .then(res => res.json())
       .then((vehicles: Vehicle[]) => {
         vehicles.forEach(v => {
@@ -169,7 +158,7 @@ export default function ShuttleTracker() {
       // 🚀 โหลด 2 เส้นทางพร้อมกัน (Parallel) ทำให้เว็บไวขึ้น 2 เท่า
       await Promise.all(routeIds.map(async (routeId) => {
         try {
-          const stopRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/route-stops/${routeId}`);
+          const stopRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/routes/${routeId}/stops`);
           const stops = (await stopRes.json()) as Stop[];
           const stopLayer = L.layerGroup();
           const points = stops.map(p => `${p.lng},${p.lat}`);
@@ -196,7 +185,7 @@ export default function ShuttleTracker() {
               });
 
               const routeLayer = L.layerGroup();
-              L.polyline(coords, { color: routeId === "R01" ? "#FC9186" : "#3B82F6", weight: 5 }).addTo(routeLayer);
+              L.polyline(coords, { color: routeId === "R01" ? "#FF8169" : "#3B82F6", weight: 5 }).addTo(routeLayer);
               routeLayersRef.current[routeId] = routeLayer;
               if (routeId === selectedRouteRef.current) routeLayer.addTo(mapRef.current!);
             }
@@ -231,7 +220,7 @@ export default function ShuttleTracker() {
     function waitForMap() {
       if (mapRef.current && LRef.current) {
         clearInterval(interval);
-        mapRef.current.flyTo(RSU_CENTER, 16.5, { animate: true, duration: 1.2 });
+        mapRef.current.flyTo(RSU_CENTER, 16.7, { animate: true, duration: 1.2 });
 
         mapRef.current.on("click", () => {
           if (targetStopRef.current || activeStopMarkerRef.current) {
@@ -241,7 +230,7 @@ export default function ShuttleTracker() {
               activeStopMarkerRef.current.setIcon(DEFAULT_STOP_ICON);
               activeStopMarkerRef.current = null;
             }
-            mapRef.current?.flyTo(RSU_CENTER, 16.5, { animate: true, duration: 0.8 });
+            mapRef.current?.flyTo(RSU_CENTER, 16.7, { animate: true, duration: 0.8 });
           }
         });
         loadRoutesAndStops();
