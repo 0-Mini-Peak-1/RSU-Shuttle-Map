@@ -36,6 +36,8 @@ export default function ShuttleTracker() {
   const [userLoc, setUserLoc] = useState<[number, number] | null>(null);
   const [targetStop, setTargetStop] = useState<Stop | null>(null);
   const [realEta, setRealEta] = useState<number | null>(null);
+  // 🚀 State สำหรับล็อคหน้าจอตอนซูม
+  const [isAppLocked, setIsAppLocked] = useState<boolean>(false);
 
   // === Refs (ตัวแปรเก็บข้อมูลหลังบ้าน ไม่ทำให้จอรีเฟรช) ===
   const selectedRouteRef = useRef<string>("R01");
@@ -53,6 +55,14 @@ export default function ShuttleTracker() {
   const stopLayersRef = useRef<Record<string, L.LayerGroup>>({});
   const vehicleRouteMapRef = useRef<Record<string, string>>({});
   const userMarkerRef = useRef<L.Marker | null>(null);
+  
+  // 🚀 Ref สำหรับจัดการคิวข้อมูลตอนซูม
+  const isZoomingRef = useRef<boolean>(false);
+  const pendingUpdatesRef = useRef<Record<string, any>>({});
+  const processLocationUpdateRef = useRef<(data: any) => void>(() => {});
+  
+  // 🚀 เพิ่ม Ref สำหรับจำค่าป้ายล่าสุดที่ถูกต้อง (จำเป็นสำหรับแก้บั๊ก Next Stop ไม่ขึ้น)
+  const vehicleLastValidIndexRef = useRef<Record<string, number>>({});
 
   // === 1. ฟังก์ชันคำนวณ ETA ===
   const calculateETA = useCallback(() => {
@@ -120,7 +130,6 @@ export default function ShuttleTracker() {
       const history = vehicleSpeedHistoryRef.current[id] || [];
       const speedKmh = Math.max(5, history.length > 0 ? history.reduce((a, b) => a + b, 0) / history.length : 15);
       const drivingTimeMinutes = pathDist / (speedKmh * (1000 / 60));
-
 
       const etaMinutes = Math.floor(drivingTimeMinutes);
       if (etaMinutes < minEtaMinutes) minEtaMinutes = etaMinutes;
@@ -222,7 +231,24 @@ export default function ShuttleTracker() {
         clearInterval(interval);
         mapRef.current.flyTo(RSU_CENTER, 16.7, { animate: true, duration: 1.2 });
 
+        // 🚀 ระบบล็อคหน้าจอและคิวข้อมูลเมื่อเริ่มซูม
+        mapRef.current.on('zoomstart', () => {
+          isZoomingRef.current = true;
+          setIsAppLocked(true);
+        });
+
+        mapRef.current.on('zoomend', () => {
+          isZoomingRef.current = false;
+          setIsAppLocked(false);
+          // โหลดข้อมูลรถที่ค้างในคิวมาแสดงผล
+          Object.values(pendingUpdatesRef.current).forEach(data => {
+            processLocationUpdateRef.current(data);
+          });
+          pendingUpdatesRef.current = {};
+        });
+
         mapRef.current.on("click", () => {
+          if (isZoomingRef.current) return;
           if (targetStopRef.current || activeStopMarkerRef.current) {
             setTargetStop(null);
             targetStopRef.current = null;
@@ -320,49 +346,115 @@ export default function ShuttleTracker() {
     updateAvailableCount();
   }
 
-  // === 6. รับข้อมูล WebSocket (แก้คอขวดแล้ว 🚀) ===
+  // === 6. ฟังก์ชันหลักสำหรับอัปเดตตำแหน่งรถ (แยกออกมาเพื่อให้เรียกตอนซูมเสร็จได้) ===
+  const processLocationUpdate = useCallback((data: any) => { // 🚀 ใช้ any ชั่วคราวเพื่อให้รับ data.station ได้
+    if (!mapRef.current) return;
+
+    const id = String(data.vehicleId || data.id);
+    
+    // 🚀 1. ดึงข้อมูลสถานีที่ถูกต้อง (เช็คทั้ง station และ actualStation)
+    const currentStation = data.station || data.actualStation;
+    if (currentStation !== undefined) {
+      vehicleActualStationRef.current[id] = currentStation;
+    }
+
+    const currentSpeed = Number(data.speed ?? data.velocity ?? 15);
+    if (!vehicleSpeedHistoryRef.current[id]) vehicleSpeedHistoryRef.current[id] = [];
+    vehicleSpeedHistoryRef.current[id].push(currentSpeed);
+    if (vehicleSpeedHistoryRef.current[id].length > 5) vehicleSpeedHistoryRef.current[id].shift();
+
+    const newPos: [number, number] = [Number(data.lat), Number(data.lng)];
+
+    if (!vehicleRouteMapRef.current[id]) vehicleRouteMapRef.current[id] = selectedRouteRef.current;
+
+    if (!vehiclesRef.current[id]) {
+      const marker = L.marker(newPos, { icon: L.icon({ iconUrl: "/icons/bus.png", iconSize: [26, 26], iconAnchor: [13, 13] }) });
+      vehiclesRef.current[id] = marker;
+      prevPositionsRef.current[id] = newPos;
+      if (vehicleRouteMapRef.current[id] === selectedRouteRef.current) marker.addTo(mapRef.current);
+      updateAvailableCount();
+      return;
+    }
+
+    const marker = vehiclesRef.current[id];
+    if (vehicleRouteMapRef.current[id] === selectedRouteRef.current) {
+      if (!mapRef.current.hasLayer(marker)) marker.addTo(mapRef.current);
+    } else {
+      if (mapRef.current.hasLayer(marker)) { mapRef.current.removeLayer(marker); return; }
+    }
+
+    // 🚀 2. Popup รถบัส แก้ไขบั๊ก Next Stop
+    const routeId = vehicleRouteMapRef.current[id];
+    const routeStops = stopsByRouteRef.current[routeId] || [];
+    
+    // 🚀 ดึงชื่อป้ายจาก Memory เพื่อความชัวร์
+    const currentActualId = String(vehicleActualStationRef.current[id] || "");
+    
+    let currentIndex = routeStops.findIndex(s =>
+      String(s.id) === currentActualId ||
+      String(s.name) === currentActualId ||
+      String((s as any).nameTh) === currentActualId
+    );
+
+    // 🚀 สำรองข้อมูลไว้ เผื่อ Backend ส่ง En Route มา
+    if (currentIndex === -1) {
+      currentIndex = vehicleLastValidIndexRef.current[id] ?? -1;
+    } else {
+      vehicleLastValidIndexRef.current[id] = currentIndex;
+    }
+
+    let nextStopName = "กำลังประเมิน...";
+    
+    if (currentIndex !== -1 && routeStops.length > 0) {
+      const nextIndex = (currentIndex + 1) % routeStops.length;
+      nextStopName = (routeStops[nextIndex] as any).nameTh || routeStops[nextIndex].name || "ไม่ทราบชื่อป้าย";
+    }
+
+    // === 🚀 Popup สไตล์เดียวกับ StopInfoCard ===
+    const popupHtml = `
+      <div class="sc-next-stop-bar" style="margin-bottom: 0;">
+        <div class="sc-next-row" style="margin-top: 4px;">
+          <span class="sc-next-label" style="min-width: 40px;">ถัดไป:</span>
+          <span class="sc-next-name" style="font-size: 0.85rem;">➡️ ${nextStopName}</span>
+        </div>
+      </div>
+    `;
+
+    if (!marker.getPopup()) {
+      marker.bindPopup(popupHtml, { closeButton: false, offset: [0, -10], className: 'custom-bus-popup' });
+    } else {
+      marker.setPopupContent(popupHtml);
+    }
+    // ===========================================
+
+    const oldPos = prevPositionsRef.current[id];
+    if (shouldMove(oldPos, newPos)) {
+      animateMove(marker, oldPos, newPos);
+      prevPositionsRef.current[id] = newPos;
+    }
+    updateAvailableCount();
+  }, [updateAvailableCount]);
+
+  // อัปเดต Reference ให้เป็นฟังก์ชันล่าสุดเสมอ
+  useEffect(() => {
+    processLocationUpdateRef.current = processLocationUpdate;
+  }, [processLocationUpdate]);
+
+  // === 7. รับข้อมูล WebSocket ===
   useEffect(() => {
     const socket: Socket = io(process.env.NEXT_PUBLIC_BACKEND_URL || "");
 
-    socket.on("location-update", (data: LocationUpdateData) => {
+    socket.on("location-update", (data: any) => { // 🚀 ใช้ any ชั่วคราวเพื่อให้รับ data.station ได้
       if (!mapRef.current) return;
 
-      const id = String(data.vehicleId || data.id);
-      if (data.actualStation !== undefined) vehicleActualStationRef.current[id] = data.actualStation;
-
-      const currentSpeed = Number(data.speed ?? data.velocity ?? 15);
-      if (!vehicleSpeedHistoryRef.current[id]) vehicleSpeedHistoryRef.current[id] = [];
-      vehicleSpeedHistoryRef.current[id].push(currentSpeed);
-      if (vehicleSpeedHistoryRef.current[id].length > 5) vehicleSpeedHistoryRef.current[id].shift();
-
-      // ❌ เอาฟังก์ชันยิง API OSRM ออกจากตรงนี้แล้ว (นี่คือตัวทำหน่วง!)
-      // 🚀 ใช้พิกัดดิบที่ได้จาก GPS เลย จะทำให้เรียลไทม์ทันที ไม่กระตุก
-      const newPos: [number, number] = [Number(data.lat), Number(data.lng)];
-
-      if (!vehicleRouteMapRef.current[id]) vehicleRouteMapRef.current[id] = selectedRouteRef.current;
-
-      if (!vehiclesRef.current[id]) {
-        const marker = L.marker(newPos, { icon: L.icon({ iconUrl: "/icons/bus.png", iconSize: [26, 26], iconAnchor: [13, 13] }) });
-        vehiclesRef.current[id] = marker;
-        prevPositionsRef.current[id] = newPos;
-        if (vehicleRouteMapRef.current[id] === selectedRouteRef.current) marker.addTo(mapRef.current);
-        updateAvailableCount();
+      // 🚀 ถ้ากำลังซูมอยู่ ให้ยัดข้อมูลใส่คิวแทน
+      if (isZoomingRef.current) {
+        const id = String(data.vehicleId || data.id);
+        pendingUpdatesRef.current[id] = data;
         return;
       }
 
-      const marker = vehiclesRef.current[id];
-      if (vehicleRouteMapRef.current[id] === selectedRouteRef.current) {
-        if (!mapRef.current.hasLayer(marker)) marker.addTo(mapRef.current);
-      } else {
-        if (mapRef.current.hasLayer(marker)) { mapRef.current.removeLayer(marker); return; }
-      }
-
-      const oldPos = prevPositionsRef.current[id];
-      if (shouldMove(oldPos, newPos)) {
-        animateMove(marker, oldPos, newPos);
-        prevPositionsRef.current[id] = newPos;
-      }
-      updateAvailableCount();
+      processLocationUpdateRef.current(data);
     });
 
     return () => { socket.disconnect(); };
@@ -370,6 +462,9 @@ export default function ShuttleTracker() {
 
   return (
     <div className="rsu-app">
+      {/* 🚀 แผ่นใสบังหน้าจอ ป้องกันการรัวคลิก/ลากมั่วตอนกำลังซูม */}
+      {isAppLocked && <div style={{ position: 'fixed', inset: 0, zIndex: 99999, cursor: 'wait' }} />}
+
       <header className="rsu-hdr">
         <h1>Rangsit University</h1>
         <p>Shuttle Bus Map</p>
