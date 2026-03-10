@@ -5,29 +5,38 @@
 /* ========================================================
   1. โครงสร้างหลัก (App Shell & Layout)
 ======================================================== */
-body {
+html, body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* ห้ามเลื่อนหน้าเว็บขึ้นลง */
+  overscroll-behavior-y: none; /* ห้ามดึงหน้าจอเพื่อรีเฟรช (Pull-to-refresh) */
+  touch-action: none; /* ป้องกันการ Swipe ขยายหน้าเว็บ */
 }
 
 .rsu-app {
   width: 100%;
-  height: 100vh;
+  height: 100dvh; /* 🚀 พระเอกของเรา: ปรับความสูงตามพื้นที่หน้าจอจริง (ไม่โดนแถบ URL บัง) */
   display: flex;
   flex-direction: column;
+  position: relative;
   overflow: hidden;
-  background: #dfe3ee;
 }
 
 .rsu-map-wrap {
-  flex: 1;
+  flex: 1; /* ขยายตัวให้เต็มพื้นที่ใต้ Header */
+  width: 100%;
   position: relative;
 }
 
 #rsu-map {
   width: 100%;
   height: 100%;
-  z-index: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
 }
 
 /* แถบสีด้านล่างสุด */

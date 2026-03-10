@@ -39,7 +39,7 @@ export default function ShuttleTracker() {
   const [userLoc, setUserLoc] = useState<[number, number] | null>(null);
   const [targetStop, setTargetStop] = useState<Stop | null>(null);
   const [realEta, setRealEta] = useState<number | null>(null);
-  const [isAppLocked, setIsAppLocked] = useState<boolean>(false);
+  const [isAppLocked, setIsAppLocked] = useState<boolean>(true);
 
   // === 2. Refs (Background Data) ===
   const selectedRouteRef = useRef<string>("R01");
@@ -235,9 +235,24 @@ export default function ShuttleTracker() {
     vehicleSpeedHistoryRef.current[id].push(currentSpeed);
     if (vehicleSpeedHistoryRef.current[id].length > 5) vehicleSpeedHistoryRef.current[id].shift();
 
-    const newPos: [number, number] = [Number(data.lat), Number(data.lng)];
+    // เปลี่ยนจาก const เป็น let เพื่อให้สามารถปรับแก้พิกัดเพื่อดูดเข้าถนนได้
+    let newPos: [number, number] = [Number(data.lat), Number(data.lng)];
 
     if (!vehicleRouteMapRef.current[id]) vehicleRouteMapRef.current[id] = selectedRouteRef.current;
+    
+    const routeId = vehicleRouteMapRef.current[id];
+
+    // ==========================================
+    // ดูดรถเข้าหาเส้นถนน (Snap to road)
+    // ==========================================
+    const coords = routeGeometryRef.current[routeId];
+    if (coords && coords.length > 0) {
+      const nearestIdx = getNearestPointIndex(newPos, coords);
+      if (nearestIdx !== -1) {
+        newPos = coords[nearestIdx]; // บังคับพิกัดรถให้อยู่บนจุดที่ใกล้ที่สุดของถนน
+      }
+    }
+    // ==========================================
 
     // สร้าง Marker ถ้ารถเพิ่งเข้าสู่ระบบ
     if (!vehiclesRef.current[id]) {
@@ -258,7 +273,6 @@ export default function ShuttleTracker() {
     }
 
     // Popup Logic (แสดงป้ายถัดไป)
-    const routeId = vehicleRouteMapRef.current[id];
     const routeStops = stopsByRouteRef.current[routeId] || [];
     const currentActualId = String(vehicleActualStationRef.current[id] || "");
     
