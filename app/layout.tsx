@@ -9,8 +9,8 @@ const prompt = Prompt({
 });
 
 export const metadata: Metadata = {
-  title: "RSU Shuttle Bus Tracker",
-  description: "Real-time shuttle bus tracking for Rangsit University",
+  title: "RSU Tram Tracker",
+  description: "Real-time tram tracking for Rangsit University",
 };
 
 export default function RootLayout({

@@ -71,7 +71,6 @@ export default function StopInfoCard({ targetStop, eta, onFindNearest }: StopInf
           )}
           <div className="sc-header">
             <div className="sc-selected-stop">
-              <div className="sc-icon">🚏</div>
               <div className="sc-stop-name">{targetStop?.nameTh || targetStop?.name}</div>
             </div>
           </div>

@@ -1,16 +1,15 @@
 "use client";
-
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import { io, Socket } from "socket.io-client";
 import "leaflet/dist/leaflet.css";
-
 import { RSU_CENTER } from "../constants";
 import { useLeafletMap } from "../hooks/useLeafletMap";
 import AvailabilityCard from "./AvailabilityCard";
 import StopInfoCard from "./StopInfoCard";
-import { shouldMove, animateMove, getNearestPointIndex, getDirectionalPointIndex } from "../utils/MapHelpers";
-import { Stop, Vehicle, LocationUpdateData } from "../types";
+import VehicleInfoCard from "./VehicleInfoCard";
+import { shouldMove, animateMove, getNearestPointIndex } from "../utils/MapHelpers";
+import { Stop } from "../types";
 
 // === Constants & Icons ===
 const AVERAGE_BUS_SPEED_KMH = 15;
@@ -41,9 +40,17 @@ export default function ShuttleTracker() {
   const [realEta, setRealEta] = useState<number | null>(null);
   const [isAppLocked, setIsAppLocked] = useState<boolean>(true);
 
+  // 🚀 เพิ่ม State สำหรับ Card รถ
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [activeVehicleInfo, setActiveVehicleInfo] = useState<{ prev: string, next: string } | null>(null);
+
   // === 2. Refs (Background Data) ===
   const selectedRouteRef = useRef<string>("R01");
   const targetStopRef = useRef<Stop | null>(null);
+  
+  // 🚀 เพิ่ม Ref สำหรับ Card รถ เพื่อใช้ใน useCallback
+  const selectedVehicleIdRef = useRef<string | null>(null);
+  const vehicleStopsStatusRef = useRef<Record<string, { prev: string, next: string }>>({});
   
   // Data Storage
   const stopsByRouteRef = useRef<Record<string, Stop[]>>({});
@@ -84,34 +91,16 @@ export default function ShuttleTracker() {
     const stops = stopsByRouteRef.current[routeId] || [];
     let minEtaMinutes = Infinity;
 
+    if (!coords || coords.length === 0) return;
+
     Object.keys(vehiclesRef.current).forEach((id) => {
       if (vehicleRouteMapRef.current[id] !== routeId || !mapRef.current?.hasLayer(vehiclesRef.current[id])) return;
 
       const pos = prevPositionsRef.current[id];
-      if (!pos || !coords || coords.length === 0) return;
+      if (!pos) return;
 
-      const busIdx = getDirectionalPointIndex(pos, coords, vehicleLastIndexRef.current[id] ?? -1);
-      vehicleLastIndexRef.current[id] = busIdx;
+      const busIdx = vehicleLastIndexRef.current[id] ?? getNearestPointIndex(pos, coords);
       const stopIdx = stop.polyIndex ?? getNearestPointIndex([stop.lat, stop.lng], coords);
-
-      const actualStationId = String(vehicleActualStationRef.current[id]);
-      const busStationSequence = stops.findIndex(s => String(s.id) === actualStationId || String(s.name) === actualStationId);
-      const targetStopSequence = stops.findIndex(s => String(s.id) === String(stop.id));
-
-      // เช็คว่ารถวิ่งเลยป้ายไปหรือยัง
-      let indexDiff = busIdx - stopIdx;
-      if (indexDiff < -(coords.length / 2)) indexDiff += coords.length;
-      else if (indexDiff > (coords.length / 2)) indexDiff -= coords.length;
-
-      const distanceFromStop = L.latLng(pos[0], pos[1]).distanceTo(L.latLng(stop.lat, stop.lng));
-      let isPassed = false;
-
-      if (busStationSequence !== -1 && targetStopSequence !== -1) {
-        if (busStationSequence > targetStopSequence) isPassed = true;
-        else if (busStationSequence === targetStopSequence && indexDiff > 0 && distanceFromStop > 15) isPassed = true;
-      } else {
-        if (indexDiff > 3 && distanceFromStop > 15) isPassed = true;
-      }
 
       const calcDist = (startIdx: number, endIdx: number) => {
         let d = 0;
@@ -121,36 +110,46 @@ export default function ShuttleTracker() {
         return d;
       };
 
-      let pathDist = 0;
-      if (!isPassed) {
-        if (busIdx <= stopIdx) {
-          pathDist = calcDist(busIdx, stopIdx);
-        } else {
-          pathDist = calcDist(busIdx, coords.length - 1) + calcDist(0, stopIdx);
-        }
-        pathDist = Math.max(pathDist, distanceFromStop);
-      } else {
-        if (busIdx <= stopIdx) {
-          const fullLoopDist = calcDist(0, coords.length - 1);
-          pathDist = fullLoopDist + calcDist(busIdx, stopIdx);
-        } else {
-          pathDist = calcDist(busIdx, coords.length - 1) + calcDist(0, stopIdx);
-        }
-      }
+      const physicalDist = L.latLng(pos[0], pos[1]).distanceTo(L.latLng(stop.lat, stop.lng));
       
-      // นับจำนวนป้ายรถเมล์ที่คั่นอยู่เพื่อเผื่อเวลาจอด
+      let idxDiff = stopIdx - busIdx; 
+      if (idxDiff < 0) idxDiff += coords.length; 
+      
+      let pathDist = 0;
       let stopsBetween = 0;
-      if (!isPassed) {
-        stopsBetween = (busIdx <= stopIdx) 
-          ? stops.filter(s => (s.polyIndex ?? 0) > busIdx && (s.polyIndex ?? 0) < stopIdx).length
-          : stops.filter(s => (s.polyIndex ?? 0) > busIdx || (s.polyIndex ?? 0) < stopIdx).length;
+      
+      const isSameLane = Math.min(idxDiff, coords.length - idxDiff) < 50; 
+      
+      if (physicalDist <= 40 && isSameLane) {
+          pathDist = 0;
+          stopsBetween = 0;
       } else {
-        stopsBetween = Math.max(0, stops.length - 2); 
+          if (busIdx <= stopIdx) {
+              pathDist = calcDist(busIdx, stopIdx);
+          } else {
+              pathDist = calcDist(busIdx, coords.length - 1) + calcDist(0, stopIdx);
+          }
+          
+          stopsBetween = stops.filter(s => {
+              if (s.polyIndex === undefined) return false;
+              if (busIdx <= stopIdx) {
+                  return s.polyIndex > busIdx && s.polyIndex < stopIdx;
+              } else {
+                  return s.polyIndex > busIdx || s.polyIndex < stopIdx;
+              }
+          }).length;
       }
 
-      // คำนวณเวลา (ขับรถล้วน + เวลาแวะป้ายละ 0.5 นาที)
+      const history = vehicleSpeedHistoryRef.current[id] || [];
+      let speedKmh = 15; 
+      if (history.length > 0) {
+          speedKmh = history.reduce((a, b) => a + b, 0) / history.length;
+      }
+      if (speedKmh < 10) speedKmh = 10; 
+
       const pureDrivingTime = pathDist / METERS_PER_MIN;
-      const stopDwellTime = stopsBetween * 0.5;
+      const stopDwellTime = stopsBetween * 0.5; 
+
       const etaMinutes = Math.max(1, Math.ceil(pureDrivingTime + stopDwellTime));
 
       if (etaMinutes < minEtaMinutes) minEtaMinutes = etaMinutes;
@@ -180,6 +179,10 @@ export default function ShuttleTracker() {
     }
 
     if (nearest && mapRef.current) {
+      // 🚀 ซ่อน Card รถ
+      setSelectedVehicleId(null);
+      selectedVehicleIdRef.current = null;
+
       setTargetStop(nearest);
       targetStopRef.current = nearest;
       calculateETA();
@@ -220,6 +223,11 @@ export default function ShuttleTracker() {
       activeStopMarkerRef.current.setIcon(DEFAULT_STOP_ICON);
       activeStopMarkerRef.current = null;
     }
+    
+    // 🚀 ซ่อน Card รถตอนเปลี่ยนสาย
+    setSelectedVehicleId(null);
+    selectedVehicleIdRef.current = null;
+
     updateAvailableCount();
   };
 
@@ -235,36 +243,45 @@ export default function ShuttleTracker() {
     vehicleSpeedHistoryRef.current[id].push(currentSpeed);
     if (vehicleSpeedHistoryRef.current[id].length > 5) vehicleSpeedHistoryRef.current[id].shift();
 
-    // เปลี่ยนจาก const เป็น let เพื่อให้สามารถปรับแก้พิกัดเพื่อดูดเข้าถนนได้
     let newPos: [number, number] = [Number(data.lat), Number(data.lng)];
 
     if (!vehicleRouteMapRef.current[id]) vehicleRouteMapRef.current[id] = selectedRouteRef.current;
     
     const routeId = vehicleRouteMapRef.current[id];
 
-    // ==========================================
-    // ดูดรถเข้าหาเส้นถนน (Snap to road)
-    // ==========================================
-    const coords = routeGeometryRef.current[routeId];
-    if (coords && coords.length > 0) {
-      const nearestIdx = getNearestPointIndex(newPos, coords);
-      if (nearestIdx !== -1) {
-        newPos = coords[nearestIdx]; // บังคับพิกัดรถให้อยู่บนจุดที่ใกล้ที่สุดของถนน
-      }
-    }
-    // ==========================================
-
-    // สร้าง Marker ถ้ารถเพิ่งเข้าสู่ระบบ
     if (!vehiclesRef.current[id]) {
       const marker = L.marker(newPos, { icon: L.icon({ iconUrl: "/icons/bus.png", iconSize: [26, 26], iconAnchor: [13, 13] }) });
       vehiclesRef.current[id] = marker;
       prevPositionsRef.current[id] = newPos;
+
+      // 🚀 เพิ่ม OnClick ให้ Marker รถ
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        
+        setSelectedVehicleId(id);
+        selectedVehicleIdRef.current = id;
+
+        // ปิดป้าย
+        setTargetStop(null);
+        targetStopRef.current = null;
+        if (activeStopMarkerRef.current) {
+          activeStopMarkerRef.current.setIcon(DEFAULT_STOP_ICON);
+          activeStopMarkerRef.current = null;
+        }
+
+        const info = vehicleStopsStatusRef.current[id];
+        if (info) setActiveVehicleInfo(info);
+
+        // ซูมเข้าหารถ
+        const pos = marker.getLatLng();
+        mapRef.current?.flyTo([pos.lat, pos.lng], 19, { animate: true, duration: 0.8 });
+      });
+
       if (vehicleRouteMapRef.current[id] === selectedRouteRef.current) marker.addTo(mapRef.current);
       updateAvailableCount();
       return;
     }
 
-    // อัปเดต Marker เดิม
     const marker = vehiclesRef.current[id];
     if (vehicleRouteMapRef.current[id] === selectedRouteRef.current) {
       if (!mapRef.current.hasLayer(marker)) marker.addTo(mapRef.current);
@@ -272,7 +289,7 @@ export default function ShuttleTracker() {
       if (mapRef.current.hasLayer(marker)) { mapRef.current.removeLayer(marker); return; }
     }
 
-    // Popup Logic (แสดงป้ายถัดไป)
+    // 🚀 ลอจิกหาป้ายก่อนหน้าและป้ายถัดไป
     const routeStops = stopsByRouteRef.current[routeId] || [];
     const currentActualId = String(vehicleActualStationRef.current[id] || "");
     
@@ -283,23 +300,23 @@ export default function ShuttleTracker() {
     if (currentIndex === -1) currentIndex = vehicleLastValidIndexRef.current[id] ?? -1;
     else vehicleLastValidIndexRef.current[id] = currentIndex;
 
+    let prevStopName = "กำลังประเมิน...";
     let nextStopName = "กำลังประเมิน...";
+    
     if (currentIndex !== -1 && routeStops.length > 0) {
+      prevStopName = (routeStops[currentIndex] as any).nameTh || routeStops[currentIndex].name || "ไม่ทราบชื่อป้าย";
       const nextIndex = (currentIndex + 1) % routeStops.length;
       nextStopName = (routeStops[nextIndex] as any).nameTh || routeStops[nextIndex].name || "ไม่ทราบชื่อป้าย";
     }
 
-    const popupHtml = `
-      <div class="sc-next-stop-bar" style="margin-bottom: 0;">
-        <div class="sc-next-row" style="margin-top: 4px;">
-          <span class="sc-next-label" style="min-width: 40px;">ถัดไป:</span>
-          <span class="sc-next-name" style="font-size: 0.85rem;">➡️ ${nextStopName}</span>
-        </div>
-      </div>
-    `;
+    // เซฟข้อมูลลง Ref
+    const newInfo = { prev: prevStopName, next: nextStopName };
+    vehicleStopsStatusRef.current[id] = newInfo;
 
-    if (!marker.getPopup()) marker.bindPopup(popupHtml, { closeButton: false, offset: [0, -10], className: 'custom-bus-popup' });
-    else marker.setPopupContent(popupHtml);
+    // ถ้าเปิด Card รถคันนี้อยู่ ให้อัปเดตข้อมูลแบบ Real-time
+    if (selectedVehicleIdRef.current === id) {
+      setActiveVehicleInfo(newInfo);
+    }
 
     // เลื่อนขยับรถแบบมี Animation
     const oldPos = prevPositionsRef.current[id];
@@ -316,13 +333,11 @@ export default function ShuttleTracker() {
     processLocationUpdateRef.current = processLocationUpdate;
   }, [processLocationUpdate]);
 
-  // 4.1 โหลดข้อมูล Map & Routes (Progressive Loading + Cache)
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
     const loadRouteData = async (routeId: string) => {
       try {
-        // วาดป้ายรถเมล์ทันที (ไม่รอเส้นทาง)
         const stopRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/public/routes/${routeId}/stops`);
         const stops = (await stopRes.json()) as Stop[];
         const stopLayer = L.layerGroup();
@@ -334,6 +349,11 @@ export default function ShuttleTracker() {
 
           marker.on("click", (e) => {
             L.DomEvent.stopPropagation(e);
+            
+            // 🚀 ปิด Card รถ เพื่อโชว์ Card ป้าย
+            setSelectedVehicleId(null);
+            selectedVehicleIdRef.current = null;
+
             if (activeStopMarkerRef.current) activeStopMarkerRef.current.setIcon(DEFAULT_STOP_ICON);
             marker.setIcon(ACTIVE_STOP_ICON);
             activeStopMarkerRef.current = marker;
@@ -347,7 +367,6 @@ export default function ShuttleTracker() {
         stopLayersRef.current[routeId] = stopLayer;
         if (routeId === selectedRouteRef.current && mapRef.current) stopLayer.addTo(mapRef.current);
 
-        // ดึงเส้นทางอัจฉริยะ (Local JSON -> Cache -> OSRM)
         const stopsSignature = stops.map(s => s.id).join(',');
         const cacheKey = `rsu-route-cache-${routeId}`;
         const cachedDataStr = localStorage.getItem(cacheKey);
@@ -371,7 +390,6 @@ export default function ShuttleTracker() {
           }
         }
 
-        // กรณีฉุกเฉิน: ดึงจาก OSRM สดๆ
         if (needToFetchOSRM || finalCoords.length === 0) {
           console.log(`[${routeId}] Fetching from OSRM...`);
           const points = stops.map(p => `${p.lng},${p.lat}`);
@@ -387,7 +405,6 @@ export default function ShuttleTracker() {
           }
         }
 
-        // วาดเส้นถนน
         if (finalCoords.length > 0) {
           routeGeometryRef.current[routeId] = finalCoords;
 
@@ -414,7 +431,6 @@ export default function ShuttleTracker() {
       }
     };
 
-    // 4.2 จัดการตัวแผนที่หลักตอนเริ่มต้น
     function waitForMap() {
       if (mapRef.current && LRef.current) {
         clearInterval(interval);
@@ -429,9 +445,17 @@ export default function ShuttleTracker() {
         
         mapRef.current.on("click", () => {
           if (isZoomingRef.current) return;
-          if (targetStopRef.current || activeStopMarkerRef.current) {
+          
+          // 🚀 กดที่ว่างๆ ปิด Card ทั้งหมด
+          if (targetStopRef.current || activeStopMarkerRef.current || selectedVehicleIdRef.current) {
+            
+            // ล้างป้าย
             setTargetStop(null); targetStopRef.current = null;
             if (activeStopMarkerRef.current) { activeStopMarkerRef.current.setIcon(DEFAULT_STOP_ICON); activeStopMarkerRef.current = null; }
+            
+            // ล้างรถ
+            setSelectedVehicleId(null); selectedVehicleIdRef.current = null;
+
             mapRef.current?.flyTo(RSU_CENTER, 16.7, { animate: true, duration: 0.8 });
           }
         });
@@ -445,7 +469,6 @@ export default function ShuttleTracker() {
     return () => clearInterval(interval);
   }, [calculateETA]);
   
-  // 4.3 จัดการ GPS (ปุ่มใกล้ฉัน)
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
@@ -467,7 +490,6 @@ export default function ShuttleTracker() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, [mapRef]);
 
-  // 4.4 Socket Connection (รับพิกัดรถบัส)
   useEffect(() => {
     const socket: Socket = io(process.env.NEXT_PUBLIC_BACKEND_URL || "");
 
@@ -488,11 +510,22 @@ export default function ShuttleTracker() {
     <div className="rsu-app">
       {isAppLocked && <div style={{ position: 'fixed', inset: 0, zIndex: 99999, cursor: 'wait' }} />}
 
-      <header className="rsu-hdr">
-        <h1>Rangsit University</h1>
-        <p>Shuttle Bus Map</p>
-      </header>
+      <div className="rsu-bar" />
+
       <div className="rsu-map-wrap">
+        {/* 🚀 Header */}
+        <header className="rsu-minimal-header">
+          <div className="rsu-header-content-wrapper">
+            <img src="/icons/RSU_logo.png" alt="RSU Logo" className="rsu-logo" />
+
+            {/* wrapper เก่าแบบแนวตั้งสำหรับตัวหนังสือ */}
+            <div className="rsu-header-text">
+              <h1 className="rsu-title">Rangsit University</h1>
+              <p className="rsu-subtitle">Tram Tracker</p>
+            </div>
+          </div>
+        </header>
+
         <div id="rsu-map" />
         <div className="route-selector">
           {["R01", "R02"].map(route => (
@@ -502,9 +535,27 @@ export default function ShuttleTracker() {
           ))}
         </div>
         <AvailabilityCard count={availableCount} />
-        <StopInfoCard targetStop={targetStop} eta={realEta} onFindNearest={handleFindNearestStop} />
+        
+        {/* 🚀 โชว์ Stop Info Card เมื่อไม่ได้เลือกรถ */}
+        {!selectedVehicleId && (
+          <StopInfoCard 
+          targetStop={targetStop} 
+          eta={realEta} 
+          onFindNearest={handleFindNearestStop} />
+        )}
+
+        {/* 🚀 โชว์ Vehicle Info Card เมื่อเลือกรถ */}
+        {selectedVehicleId && activeVehicleInfo && (
+          <VehicleInfoCard 
+            routeId={selectedRoute}
+            prevStop={activeVehicleInfo.prev}
+            nextStop={activeVehicleInfo.next}
+            onFindNearest={handleFindNearestStop}
+          />
+        )}
+
       </div>
       <div className="rsu-bar" />
     </div>
   );
-} 
+}

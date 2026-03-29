@@ -41,35 +41,70 @@ html, body {
 
 /* แถบสีด้านล่างสุด */
 .rsu-bar {
-  height: 5px;
+  height: 6px;
   flex-shrink: 0;
-  background: linear-gradient(90deg, #e91e8c, #7c3aed, #4a90d9);
+  background: linear-gradient(90deg, #ff53b2, #9b61ff, #548aff);
 }
 
 /* ========================================================
   2. ส่วนหัว (Header)
 ======================================================== */
-.rsu-hdr {
-  background: linear-gradient(120deg, #e91e8c 0%, #c2185b 28%, #7c3aed 65%, #4a90d9 100%);
-  padding: 18px 28px 14px;
-  text-align: center;
-  flex-shrink: 0;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+
+.rsu-minimal-header {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px); 
+  padding: 10px 16px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); 
+  z-index: 1000; 
+  pointer-events: auto; 
+  display: flex;
+  align-items: center;
 }
 
-.rsu-hdr h1 {
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: #fff;
-  margin: 0 0 2px;
-  letter-spacing: 0.01em;
+.rsu-header-content-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px; 
 }
 
-.rsu-hdr p {
-  font-size: 0.8rem;
-  font-weight: 400;
-  color: rgba(255,255,255,0.88);
+.rsu-logo {
+  width: 40px; 
+  height: 40px;
+  border-radius: 50%; 
+  object-fit: contain; 
+}
+
+.rsu-header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.rsu-header-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.rsu-title {
   margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937; 
+  line-height: 1.2;
+  text-align: center;
+}
+
+.rsu-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  line-height: 1.2;
+  margin-top: 2px;
+  text-align: center;
 }
 
 /* ========================================================
@@ -116,30 +151,73 @@ html, body {
 /* ========================================================
   4. UI ควบคุมแผนที่ (รถว่าง & เลือกสายรถ)
 ======================================================== */
+/* กล่องหลัก แนวนอน มินิมอล */
 .rsu-avail {
   position: absolute;
   top: 16px;
   right: 16px;
-  background: #fff;
-  border-radius: 16px;
-  padding: 14px 20px 12px;
-  text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.13);
-  z-index: 500;
-  min-width: 115px;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  padding: 8px 14px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: unset; 
+  text-align: left; 
 }
 
-.rsu-avail-lbl { font-size: 0.7rem; font-weight: 500; color: #999; margin-bottom: 1px; }
-.rsu-avail-num { font-size: 2.9rem; font-weight: 700; color: #1a1a2e; line-height: 1; margin-bottom: 1px; }
-.rsu-avail-sub { font-size: 0.7rem; font-weight: 500; color: #666; line-height: 1.35; }
+/* จุดไฟสถานะ */
+.rsu-avail-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.rsu-avail-dot.active {
+  background-color: #10B981; /* สีเขียว */
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+}
+
+.rsu-avail-dot.inactive {
+  background-color: #EF4444; /* สีแดง */
+  box-shadow: none;
+}
+
+/* กล่องครอบตัวหนังสือ */
+.rsu-avail-text-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+/* หัวข้อตัวเล็ก */
+.rsu-avail-lbl { 
+  font-size: 0.7rem; 
+  font-weight: 600; 
+  color: #6B7280; 
+  line-height: 1; 
+  margin-bottom: 0;
+}
+
+/* ตัวเลขและหน่วย */
+.rsu-avail-num { 
+  font-size: 1rem; 
+  font-weight: 800; 
+  color: #1F2937; 
+  line-height: 1.2; 
+  margin-top: 2px; 
+  margin-bottom: 0;
+}
 
 .route-selector {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  z-index: 500;
+  top: 80px;     
+  right: 16px;  
+  z-index: 1000;
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .route-btn {
