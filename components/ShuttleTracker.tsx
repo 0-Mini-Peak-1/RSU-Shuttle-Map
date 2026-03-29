@@ -8,6 +8,7 @@ import { useLeafletMap } from "../hooks/useLeafletMap";
 import AvailabilityCard from "./AvailabilityCard";
 import StopInfoCard from "./StopInfoCard";
 import VehicleInfoCard from "./VehicleInfoCard";
+import AppTour from "./AppTour";
 import { shouldMove, animateMove, getNearestPointIndex } from "../utils/MapHelpers";
 import { Stop } from "../types";
 
@@ -20,6 +21,7 @@ const DEFAULT_STOP_ICON = L.icon({
   iconSize: [32, 32],
   iconAnchor: [16, 32],
   popupAnchor: [0, -32],
+  className: 'stop-marker-tour'
 });
 
 const ACTIVE_STOP_ICON = L.icon({
@@ -27,6 +29,7 @@ const ACTIVE_STOP_ICON = L.icon({
   iconSize: [48, 48],
   iconAnchor: [24, 48],
   popupAnchor: [0, -48],
+  className: 'stop-marker-tour'
 });
 
 export default function ShuttleTracker() {
@@ -250,7 +253,7 @@ export default function ShuttleTracker() {
     const routeId = vehicleRouteMapRef.current[id];
 
     if (!vehiclesRef.current[id]) {
-      const marker = L.marker(newPos, { icon: L.icon({ iconUrl: "/icons/bus.png", iconSize: [26, 26], iconAnchor: [13, 13] }) });
+      const marker = L.marker(newPos, { icon: L.icon({ iconUrl: "/icons/bus.png", iconSize: [26, 26], iconAnchor: [13, 13], className: 'bus-marker-tour' }) });
       vehiclesRef.current[id] = marker;
       prevPositionsRef.current[id] = newPos;
 
@@ -468,7 +471,22 @@ export default function ShuttleTracker() {
     interval = setInterval(waitForMap, 200);
     return () => clearInterval(interval);
   }, [calculateETA]);
+
+  useEffect(() => {
+    const handleZoomCenter = () => {
+      if (mapRef.current) {
+        // 🚀 พากล้องร่อนกลับมาจุดศูนย์กลางมหาลัย
+        mapRef.current.flyTo(RSU_CENTER, 16.7, {
+          animate: true,
+          duration: 1.2
+        });
+      }
+    };
   
+    window.addEventListener('tour-zoom-center', handleZoomCenter);
+    return () => window.removeEventListener('tour-zoom-center', handleZoomCenter);
+  }, [mapRef]);
+
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
@@ -556,6 +574,7 @@ export default function ShuttleTracker() {
 
       </div>
       <div className="rsu-bar" />
+      <AppTour />
     </div>
   );
 }
