@@ -47,7 +47,7 @@ export function getDirectionalPointIndex(pos: Coordinate, coords: Coordinate[], 
   let bestIdx = lastIdx;
 
   // ค้นหาในระยะ -10 จุด (เผื่อ GPS ถอยหลังนิดหน่อย) ถึง +50 จุด (ระยะทางข้างหน้า)
-  for (let i = -10; i <= 50; i++) {
+  for (let i = -5; i <= 15; i++) {
     const checkIdx = (lastIdx + i + coords.length) % coords.length; // วนลูป (Loop) กลับไป 0 ได้
     const dst = pt.distanceTo(L.latLng(coords[checkIdx][0], coords[checkIdx][1]));
     if (dst < minDst) {

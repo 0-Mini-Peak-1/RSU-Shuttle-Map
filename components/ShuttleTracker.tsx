@@ -9,7 +9,7 @@ import AvailabilityCard from "./AvailabilityCard";
 import StopInfoCard from "./StopInfoCard";
 import VehicleInfoCard from "./VehicleInfoCard";
 import AppTour from "./AppTour";
-import { shouldMove, animateMove, getNearestPointIndex } from "../utils/MapHelpers";
+import { shouldMove, animateMove, getNearestPointIndex, getDirectionalPointIndex } from "../utils/MapHelpers";
 import { Stop } from "../types";
 import * as turf from '@turf/turf';
 
@@ -68,6 +68,7 @@ export default function ShuttleTracker() {
   const vehicleActualStationRef = useRef<Record<string, string | number>>({});
   const vehicleRouteMapRef = useRef<Record<string, string>>({});
   const vehicleLastValidIndexRef = useRef<Record<string, number>>({});
+  const vehicleLastPolyIndexRef = useRef<Record<string, number>>({});
   
   // Map Layers
   const activeStopMarkerRef = useRef<L.Marker | null>(null);
@@ -259,13 +260,41 @@ export default function ShuttleTracker() {
     const coords = routeGeometryRef.current[routeId];
     if (coords && coords.length > 0) {
       try {
-        const line = turf.lineString(coords.map(c => [c[1], c[0]]));
         const pt = turf.point([rawLng, rawLat]);
+        let currentIdx = vehicleLastPolyIndexRef.current[id] ?? -1;
+
+        // Check for bus booted up or teleported (e.g., GPS glitch or route change)
+        let needGlobalSearch = (currentIdx === -1);
+        if (!needGlobalSearch) {
+            const lastCoord = coords[currentIdx];
+            // Measure physical distance from the last known spot
+            const distFromLast = L.latLng(rawLat, rawLng).distanceTo(L.latLng(lastCoord[0], lastCoord[1]));
+            if (distFromLast > 100) needGlobalSearch = true; // Teleport detected!
+        }
+
+        // Find the TRUE lane
+        if (needGlobalSearch) {
+            // Turf searches the whole map but perfectly calculates the closest LINE, not dot, so it won't get confused by parallel lanes
+            const fullLine = turf.lineString(coords.map(c => [c[1], c[0]]));
+            const globalSnap = turf.nearestPointOnLine(fullLine, pt);
+            currentIdx = globalSnap.properties.index || 0;
+        } else {
+            currentIdx = getDirectionalPointIndex([rawLat, rawLng], coords, currentIdx);
+        }
+
+        vehicleLastPolyIndexRef.current[id] = currentIdx;
+
+        // Build the safe Mini-Route (5 points behind, 5 ahead)
+        const miniRouteCoords = [];
+        for (let i = -5; i <= 5; i++) {
+          const idx = (currentIdx + i + coords.length) % coords.length;
+          miniRouteCoords.push([coords[idx][1], coords[idx][0]]);
+        }
+
+        // Snap visually to the safe Mini-Route
+        const miniLine = turf.lineString(miniRouteCoords);
+        const snapped = turf.nearestPointOnLine(miniLine, pt);
         
-        // Snap the raw GPS to the closest exact point on the line
-        const snapped = turf.nearestPointOnLine(line, pt);
-        
-        // Convert back to Leaflet's [Latitude, Longitude] format
         newPos = [snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]];
       } catch (err) {
         console.warn("Turf snapping failed, falling back to raw GPS", err);
