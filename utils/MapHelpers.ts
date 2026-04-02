@@ -8,7 +8,7 @@ export function shouldMove(oldPos: Coordinate, newPos: Coordinate): boolean {
   return Math.sqrt(dx * dx + dy * dy) > 0.00003;
 }
 
-export function animateMove(marker: L.Marker, start: Coordinate, end: Coordinate, duration: number = 800) {
+export function animateMove(marker: L.Marker, start: Coordinate, end: Coordinate, duration: number = 2800) {
   const startTime = performance.now();
   function step(currentTime: number) {
     const progress = Math.min((currentTime - startTime) / duration, 1);

@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@turf/turf": "^7.3.4",
     "leaflet": "^1.9.4",
     "next": "16.1.6",
     "react": "19.2.3",

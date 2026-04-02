@@ -11,6 +11,7 @@ import VehicleInfoCard from "./VehicleInfoCard";
 import AppTour from "./AppTour";
 import { shouldMove, animateMove, getNearestPointIndex } from "../utils/MapHelpers";
 import { Stop } from "../types";
+import * as turf from '@turf/turf';
 
 // === Constants & Icons ===
 const AVERAGE_BUS_SPEED_KMH = 15;
@@ -246,11 +247,30 @@ export default function ShuttleTracker() {
     vehicleSpeedHistoryRef.current[id].push(currentSpeed);
     if (vehicleSpeedHistoryRef.current[id].length > 5) vehicleSpeedHistoryRef.current[id].shift();
 
-    let newPos: [number, number] = [Number(data.lat), Number(data.lng)];
+    // Reassign to newPos in case we need to snap to road later
+    let rawLat = Number(data.lat);
+    let rawLng = Number(data.lng);
+    let newPos: [number, number] = [rawLat, rawLng];
 
     if (!vehicleRouteMapRef.current[id]) vehicleRouteMapRef.current[id] = selectedRouteRef.current;
-    
     const routeId = vehicleRouteMapRef.current[id];
+
+    // Added: Snap to road using Turf.js
+    const coords = routeGeometryRef.current[routeId];
+    if (coords && coords.length > 0) {
+      try {
+        const line = turf.lineString(coords.map(c => [c[1], c[0]]));
+        const pt = turf.point([rawLng, rawLat]);
+        
+        // Snap the raw GPS to the closest exact point on the line
+        const snapped = turf.nearestPointOnLine(line, pt);
+        
+        // Convert back to Leaflet's [Latitude, Longitude] format
+        newPos = [snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]];
+      } catch (err) {
+        console.warn("Turf snapping failed, falling back to raw GPS", err);
+      }
+    }
 
     if (!vehiclesRef.current[id]) {
       const marker = L.marker(newPos, { icon: L.icon({ iconUrl: "/icons/bus.png", iconSize: [26, 26], iconAnchor: [13, 13], className: 'bus-marker-tour' }) });
