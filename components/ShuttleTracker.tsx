@@ -67,7 +67,6 @@ export default function ShuttleTracker() {
   const vehicleLastIndexRef = useRef<Record<string, number>>({});
   const vehicleActualStationRef = useRef<Record<string, string | number>>({});
   const vehicleRouteMapRef = useRef<Record<string, string>>({});
-  const vehicleLastValidIndexRef = useRef<Record<string, number>>({});
   const vehicleLastPolyIndexRef = useRef<Record<string, number>>({});
   
   // Map Layers
@@ -101,11 +100,10 @@ export default function ShuttleTracker() {
     Object.keys(vehiclesRef.current).forEach((id) => {
       if (vehicleRouteMapRef.current[id] !== routeId || !mapRef.current?.hasLayer(vehiclesRef.current[id])) return;
 
-      const pos = prevPositionsRef.current[id];
-      if (!pos) return;
+      const busIdx = vehicleLastPolyIndexRef.current[id];
+      const stopIdx = stop.polyIndex;
 
-      const busIdx = vehicleLastIndexRef.current[id] ?? getNearestPointIndex(pos, coords);
-      const stopIdx = stop.polyIndex ?? getNearestPointIndex([stop.lat, stop.lng], coords);
+      if (busIdx === undefined || busIdx === -1 || stopIdx === undefined) return;
 
       const calcDist = (startIdx: number, endIdx: number) => {
         let d = 0;
@@ -115,26 +113,32 @@ export default function ShuttleTracker() {
         return d;
       };
 
-      const physicalDist = L.latLng(pos[0], pos[1]).distanceTo(L.latLng(stop.lat, stop.lng));
-      
-      let idxDiff = stopIdx - busIdx; 
-      if (idxDiff < 0) idxDiff += coords.length; 
-      
+      const pos = prevPositionsRef.current[id];
+      const physicalDist = pos ? L.latLng(pos[0], pos[1]).distanceTo(L.latLng(stop.lat, stop.lng)) : Infinity;
+
+      // ระยะห่างแบบ 1D Index (เดินหน้าอย่างเดียว)
+      let forwardDiff = stopIdx - busIdx;
+      if (forwardDiff < 0) forwardDiff += coords.length;
+
+      let backwardDiff = busIdx - stopIdx;
+      if (backwardDiff < 0) backwardDiff += coords.length;
+
       let pathDist = 0;
       let stopsBetween = 0;
-      
-      const isSameLane = Math.min(idxDiff, coords.length - idxDiff) < 50; 
-      
-      if (physicalDist <= 40 && isSameLane) {
+
+      // ถ้ารถอยู่ใกล้ป้ายจริง (ระยะทาง < 30m) และ Index อยู่ใกล้กัน ถือว่าถึงแล้ว
+      if (physicalDist <= 30 && (forwardDiff < 15 || backwardDiff < 15)) {
           pathDist = 0;
           stopsBetween = 0;
       } else {
+          // บังคับคำนวณตามลำดับ Index (ถ้ารถอยู่เลนสวน มันจะบวกระยะทางตามเลนจนกว่าจะวนรถกลับมาเอง)
           if (busIdx <= stopIdx) {
               pathDist = calcDist(busIdx, stopIdx);
           } else {
               pathDist = calcDist(busIdx, coords.length - 1) + calcDist(0, stopIdx);
           }
-          
+
+          // นับป้ายที่อยู่ระหว่างทาง (เฉพาะป้ายที่ยังไม่ถึง)
           stopsBetween = stops.filter(s => {
               if (s.polyIndex === undefined) return false;
               if (busIdx <= stopIdx) {
@@ -146,17 +150,14 @@ export default function ShuttleTracker() {
       }
 
       const history = vehicleSpeedHistoryRef.current[id] || [];
-      let speedKmh = 15; 
-      if (history.length > 0) {
-          speedKmh = history.reduce((a, b) => a + b, 0) / history.length;
-      }
-      if (speedKmh < 10) speedKmh = 10; 
+      let speedKmh = 15;
+      if (history.length > 0) speedKmh = history.reduce((a, b) => a + b, 0) / history.length;
+      if (speedKmh < 10) speedKmh = 10;
 
       const pureDrivingTime = pathDist / METERS_PER_MIN;
-      const stopDwellTime = stopsBetween * 0.5; 
+      const stopDwellTime = stopsBetween * 0.5;
 
       const etaMinutes = Math.max(1, Math.ceil(pureDrivingTime + stopDwellTime));
-
       if (etaMinutes < minEtaMinutes) minEtaMinutes = etaMinutes;
     });
 
@@ -229,7 +230,7 @@ export default function ShuttleTracker() {
       activeStopMarkerRef.current = null;
     }
     
-    // 🚀 ซ่อน Card รถตอนเปลี่ยนสาย
+    // ซ่อน Card รถตอนเปลี่ยนสาย
     setSelectedVehicleId(null);
     selectedVehicleIdRef.current = null;
 
@@ -248,7 +249,6 @@ export default function ShuttleTracker() {
     vehicleSpeedHistoryRef.current[id].push(currentSpeed);
     if (vehicleSpeedHistoryRef.current[id].length > 5) vehicleSpeedHistoryRef.current[id].shift();
 
-    // Reassign to newPos in case we need to snap to road later
     let rawLat = Number(data.lat);
     let rawLng = Number(data.lng);
     let newPos: [number, number] = [rawLat, rawLng];
@@ -256,64 +256,65 @@ export default function ShuttleTracker() {
     if (!vehicleRouteMapRef.current[id]) vehicleRouteMapRef.current[id] = selectedRouteRef.current;
     const routeId = vehicleRouteMapRef.current[id];
 
-    // Added: Snap to road using Turf.js
+    // ดึงองศาการหมุนจาก Backend
+    const backendBearing = Number(data.bearing ?? data.heading ?? 0);
+
+    // 1. Turf.js แบบ "สายตาสั้น" ป้องกันการวาร์ป
     const coords = routeGeometryRef.current[routeId];
     if (coords && coords.length > 0) {
+      let currentIdx = vehicleLastPolyIndexRef.current[id] ?? -1;
+      let needGlobalSearch = (currentIdx === -1);
+
+      if (!needGlobalSearch) {
+        const lastCoord = coords[currentIdx];
+        const distFromLast = L.latLng(rawLat, rawLng).distanceTo(L.latLng(lastCoord[0], lastCoord[1]));
+        if (distFromLast > 150) needGlobalSearch = true; 
+      }
+
+      if (needGlobalSearch) {
+        currentIdx = getNearestPointIndex([rawLat, rawLng], coords);
+      } else {
+        currentIdx = getDirectionalPointIndex([rawLat, rawLng], coords, currentIdx);
+      }
+      vehicleLastPolyIndexRef.current[id] = currentIdx;
+
+      const localLineCoords = [];
+      for (let i = -5; i <= 15; i++) {
+        const idx = (currentIdx + i + coords.length) % coords.length;
+        localLineCoords.push([coords[idx][1], coords[idx][0]]);
+      }
+
       try {
         const pt = turf.point([rawLng, rawLat]);
-        let currentIdx = vehicleLastPolyIndexRef.current[id] ?? -1;
-
-        // Check for bus booted up or teleported (e.g., GPS glitch or route change)
-        let needGlobalSearch = (currentIdx === -1);
-        if (!needGlobalSearch) {
-            const lastCoord = coords[currentIdx];
-            // Measure physical distance from the last known spot
-            const distFromLast = L.latLng(rawLat, rawLng).distanceTo(L.latLng(lastCoord[0], lastCoord[1]));
-            if (distFromLast > 100) needGlobalSearch = true; // Teleport detected!
-        }
-
-        // Find the TRUE lane
-        if (needGlobalSearch) {
-            // Turf searches the whole map but perfectly calculates the closest LINE, not dot, so it won't get confused by parallel lanes
-            const fullLine = turf.lineString(coords.map(c => [c[1], c[0]]));
-            const globalSnap = turf.nearestPointOnLine(fullLine, pt);
-            currentIdx = globalSnap.properties.index || 0;
-        } else {
-            currentIdx = getDirectionalPointIndex([rawLat, rawLng], coords, currentIdx);
-        }
-
-        vehicleLastPolyIndexRef.current[id] = currentIdx;
-
-        // Build the safe Mini-Route (5 points behind, 5 ahead)
-        const miniRouteCoords = [];
-        for (let i = -5; i <= 5; i++) {
-          const idx = (currentIdx + i + coords.length) % coords.length;
-          miniRouteCoords.push([coords[idx][1], coords[idx][0]]);
-        }
-
-        // Snap visually to the safe Mini-Route
-        const miniLine = turf.lineString(miniRouteCoords);
-        const snapped = turf.nearestPointOnLine(miniLine, pt);
-        
+        const localLine = turf.lineString(localLineCoords);
+        const snapped = turf.nearestPointOnLine(localLine, pt);
         newPos = [snapped.geometry.coordinates[1], snapped.geometry.coordinates[0]];
       } catch (err) {
-        console.warn("Turf snapping failed, falling back to raw GPS", err);
+        newPos = [coords[currentIdx][0], coords[currentIdx][1]]; 
       }
     }
 
+    // 🚀 2. สร้าง Marker รถใหม่ (ใช้ L.divIcon เพื่อหมุนรูปด้วย CSS)
     if (!vehiclesRef.current[id]) {
-      const marker = L.marker(newPos, { icon: L.icon({ iconUrl: "/icons/bus.png", iconSize: [26, 26], iconAnchor: [13, 13], className: 'bus-marker-tour' }) });
+      // สร้าง HTML Image Tag พร้อมกำหนดองศาการหมุน และ Animation ให้สมูท
+      const busHtml = `<img id="bus-img-${id}" src="/icons/arrow.png" style="width: 26px; height: 26px; transform: rotate(${backendBearing}deg); transition: transform 0.4s ease-out; display: block;" />`;
+
+      const marker = L.marker(newPos, { 
+        icon: L.divIcon({ 
+          html: busHtml,
+          className: 'bus-marker-tour',
+          iconSize: [26, 26], 
+          iconAnchor: [13, 13]
+        }) 
+      });
       vehiclesRef.current[id] = marker;
       prevPositionsRef.current[id] = newPos;
 
-      // 🚀 เพิ่ม OnClick ให้ Marker รถ
       marker.on("click", (e) => {
         L.DomEvent.stopPropagation(e);
-        
         setSelectedVehicleId(id);
         selectedVehicleIdRef.current = id;
 
-        // ปิดป้าย
         setTargetStop(null);
         targetStopRef.current = null;
         if (activeStopMarkerRef.current) {
@@ -324,7 +325,6 @@ export default function ShuttleTracker() {
         const info = vehicleStopsStatusRef.current[id];
         if (info) setActiveVehicleInfo(info);
 
-        // ซูมเข้าหารถ
         const pos = marker.getLatLng();
         mapRef.current?.flyTo([pos.lat, pos.lng], 19, { animate: true, duration: 0.8 });
       });
@@ -334,6 +334,7 @@ export default function ShuttleTracker() {
       return;
     }
 
+    // 3. อัปเดต Marker รถที่มีอยู่แล้ว
     const marker = vehiclesRef.current[id];
     if (vehicleRouteMapRef.current[id] === selectedRouteRef.current) {
       if (!mapRef.current.hasLayer(marker)) marker.addTo(mapRef.current);
@@ -341,41 +342,59 @@ export default function ShuttleTracker() {
       if (mapRef.current.hasLayer(marker)) { mapRef.current.removeLayer(marker); return; }
     }
 
-    // 🚀 ลอจิกหาป้ายก่อนหน้าและป้ายถัดไป
-    const routeStops = stopsByRouteRef.current[routeId] || [];
-    const currentActualId = String(vehicleActualStationRef.current[id] || "");
-    
-    let currentIndex = routeStops.findIndex(s =>
-      String(s.id) === currentActualId || String(s.name) === currentActualId || String((s as any).nameTh) === currentActualId
-    );
-
-    if (currentIndex === -1) currentIndex = vehicleLastValidIndexRef.current[id] ?? -1;
-    else vehicleLastValidIndexRef.current[id] = currentIndex;
-
-    let prevStopName = "กำลังประเมิน...";
-    let nextStopName = "กำลังประเมิน...";
-    
-    if (currentIndex !== -1 && routeStops.length > 0) {
-      prevStopName = (routeStops[currentIndex] as any).nameTh || routeStops[currentIndex].name || "ไม่ทราบชื่อป้าย";
-      const nextIndex = (currentIndex + 1) % routeStops.length;
-      nextStopName = (routeStops[nextIndex] as any).nameTh || routeStops[nextIndex].name || "ไม่ทราบชื่อป้าย";
+    // 🚀 4. สั่งหมุนไอคอนรูปรถแบบ Real-time ตามค่าจาก Backend
+    const imgEl = document.getElementById(`bus-img-${id}`);
+    if (imgEl) {
+      imgEl.style.transform = `rotate(${backendBearing}deg)`;
     }
 
-    // เซฟข้อมูลลง Ref
+    // 5. ระบบหาป้ายก่อนหน้า / ถัดไป
+    const routeStops = stopsByRouteRef.current[routeId] || [];
+    let prevStopName = "กำลังประเมิน...";
+    let nextStopName = "กำลังประเมิน...";
+
+    const currentIdx = vehicleLastPolyIndexRef.current[id] ?? -1;
+
+    if (routeStops.length > 0 && currentIdx !== -1) {
+      let minPositiveDiff = Infinity;
+      let nextStopObj = null;
+      let prevStopObj = null;
+
+      for (let i = 0; i < routeStops.length; i++) {
+        const stop = routeStops[i];
+        let stopIdx = stop.polyIndex;
+        if (stopIdx === undefined) continue;
+
+        let diff = stopIdx - currentIdx;
+        if (diff < 0) diff += coords.length; 
+
+        if (diff < minPositiveDiff) {
+          minPositiveDiff = diff;
+          nextStopObj = stop;
+          
+          const prevIndex = (i - 1 + routeStops.length) % routeStops.length;
+          prevStopObj = routeStops[prevIndex];
+        }
+      }
+
+      if (prevStopObj) prevStopName = (prevStopObj as any).nameTh || prevStopObj.name || "ไม่ทราบชื่อป้าย";
+      if (nextStopObj) nextStopName = (nextStopObj as any).nameTh || nextStopObj.name || "ไม่ทราบชื่อป้าย";
+    }
+
     const newInfo = { prev: prevStopName, next: nextStopName };
     vehicleStopsStatusRef.current[id] = newInfo;
 
-    // ถ้าเปิด Card รถคันนี้อยู่ ให้อัปเดตข้อมูลแบบ Real-time
     if (selectedVehicleIdRef.current === id) {
       setActiveVehicleInfo(newInfo);
     }
 
-    // เลื่อนขยับรถแบบมี Animation
+    // 6. อนิเมชันเลื่อนรถให้เนียนตา
     const oldPos = prevPositionsRef.current[id];
     if (shouldMove(oldPos, newPos)) {
       animateMove(marker, oldPos, newPos);
       prevPositionsRef.current[id] = newPos;
     }
+    
     updateAvailableCount();
   }, [updateAvailableCount]);
 

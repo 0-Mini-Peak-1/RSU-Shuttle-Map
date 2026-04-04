@@ -39,16 +39,14 @@ export function getNearestPointIndex(pos: Coordinate, coords: Coordinate[]): num
 
 // 🚀 ฟังก์ชันใหม่: ล็อกทิศทาง ค้นหาเฉพาะจุดที่อยู่ข้างหน้า (แก้ปัญหาเลนสวนกัน)
 export function getDirectionalPointIndex(pos: Coordinate, coords: Coordinate[], lastIdx: number): number {
-  // ถ้ารถยังไม่มีข้อมูลจุดล่าสุด ให้หาแบบปกติไปก่อน
   if (lastIdx === -1 || lastIdx === undefined) return getNearestPointIndex(pos, coords);
 
   const pt = L.latLng(pos[0], pos[1]);
   let minDst = Infinity;
   let bestIdx = lastIdx;
 
-  // ค้นหาในระยะ -10 จุด (เผื่อ GPS ถอยหลังนิดหน่อย) ถึง +50 จุด (ระยะทางข้างหน้า)
   for (let i = -5; i <= 15; i++) {
-    const checkIdx = (lastIdx + i + coords.length) % coords.length; // วนลูป (Loop) กลับไป 0 ได้
+    const checkIdx = (lastIdx + i + coords.length) % coords.length;
     const dst = pt.distanceTo(L.latLng(coords[checkIdx][0], coords[checkIdx][1]));
     if (dst < minDst) {
       minDst = dst;
