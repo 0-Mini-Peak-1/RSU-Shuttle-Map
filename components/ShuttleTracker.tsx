@@ -5,6 +5,7 @@ import { io, Socket } from "socket.io-client";
 import "leaflet/dist/leaflet.css";
 import { RSU_CENTER } from "../constants";
 import { useLeafletMap } from "../hooks/useLeafletMap";
+import { generateBusIconHtml } from "../utils/IconHelpers";
 import AvailabilityCard from "./AvailabilityCard";
 import StopInfoCard from "./StopInfoCard";
 import VehicleInfoCard from "./VehicleInfoCard";
@@ -237,7 +238,7 @@ export default function ShuttleTracker() {
     updateAvailableCount();
   };
 
-  const processLocationUpdate = useCallback((data: any) => {
+const processLocationUpdate = useCallback((data: any) => {
     if (!mapRef.current) return;
 
     const id = String(data.vehicleId || data.id);
@@ -256,10 +257,10 @@ export default function ShuttleTracker() {
     if (!vehicleRouteMapRef.current[id]) vehicleRouteMapRef.current[id] = selectedRouteRef.current;
     const routeId = vehicleRouteMapRef.current[id];
 
-    // ดึงองศาการหมุนจาก Backend
+    // 🚀 ดึงองศาการหมุนจาก Backend ตรงๆ
     const backendBearing = Number(data.bearing ?? data.heading ?? 0);
 
-    // 1. Turf.js แบบ "สายตาสั้น" ป้องกันการวาร์ป
+    // 1. Turf.js แบบ "สายตาสั้น" ป้องกันการวาร์ปข้ามเลน
     const coords = routeGeometryRef.current[routeId];
     if (coords && coords.length > 0) {
       let currentIdx = vehicleLastPolyIndexRef.current[id] ?? -1;
@@ -294,17 +295,16 @@ export default function ShuttleTracker() {
       }
     }
 
-    // 🚀 2. สร้าง Marker รถใหม่ (ใช้ L.divIcon เพื่อหมุนรูปด้วย CSS)
+    // 🚀 2. สร้าง Marker รถใหม่ (ดึง HTML จากไฟล์แยกมาใช้)
     if (!vehiclesRef.current[id]) {
-      // สร้าง HTML Image Tag พร้อมกำหนดองศาการหมุน และ Animation ให้สมูท
-      const busHtml = `<img id="bus-img-${id}" src="/icons/arrow.png" style="width: 26px; height: 26px; transform: rotate(${backendBearing}deg); transition: transform 0.4s ease-out; display: block;" />`;
+      const busHtml = generateBusIconHtml(id, backendBearing);
 
       const marker = L.marker(newPos, { 
         icon: L.divIcon({ 
           html: busHtml,
           className: 'bus-marker-tour',
-          iconSize: [26, 26], 
-          iconAnchor: [13, 13]
+          iconSize: [36, 44], 
+          iconAnchor: [18, 22] 
         }) 
       });
       vehiclesRef.current[id] = marker;
@@ -342,13 +342,16 @@ export default function ShuttleTracker() {
       if (mapRef.current.hasLayer(marker)) { mapRef.current.removeLayer(marker); return; }
     }
 
-    // 🚀 4. สั่งหมุนไอคอนรูปรถแบบ Real-time ตามค่าจาก Backend
-    const imgEl = document.getElementById(`bus-img-${id}`);
-    if (imgEl) {
-      imgEl.style.transform = `rotate(${backendBearing}deg)`;
+    // 🚀 4. สั่งหมุนไอคอนเข็มทิศ และหมุนตัวเลขกลับให้ตั้งตรง
+    const wrapperEl = document.getElementById(`bus-wrapper-${id}`);
+    const textEl = document.getElementById(`bus-text-${id}`);
+    if (wrapperEl && textEl) {
+      wrapperEl.style.transform = `rotate(${backendBearing}deg)`;
+      const snappedBearing = Math.round(backendBearing / 90) * 90;
+      textEl.setAttribute('transform', `rotate(${-snappedBearing}, 16, 24)`);
     }
 
-    // 5. ระบบหาป้ายก่อนหน้า / ถัดไป
+    // 5. ระบบหาป้ายก่อนหน้า / ถัดไป แบบ 1D Index
     const routeStops = stopsByRouteRef.current[routeId] || [];
     let prevStopName = "กำลังประเมิน...";
     let nextStopName = "กำลังประเมิน...";
